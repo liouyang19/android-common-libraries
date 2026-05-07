@@ -22,9 +22,7 @@ pluginManagement {
 		maven { setUrl("https://www.jitpack.io") }
 	}
 }
-plugins {
-	id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
-}
+
 dependencyResolutionManagement {
 	repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
 	repositories {
@@ -34,8 +32,6 @@ dependencyResolutionManagement {
 		maven { setUrl("https://maven.aliyun.com/repository/public") }
 		maven { setUrl("https://maven.aliyun.com/repository/central") }
 		maven { setUrl("https://maven.aliyun.com/repository/google") }
-		// 其他必要仓库
-		maven { setUrl("https://www.jitpack.io") }
 		google()
 		mavenCentral()
 		gradlePluginPortal()
@@ -43,7 +39,7 @@ dependencyResolutionManagement {
 	}
 	versionCatalogs {
 		create("libs") {
-			from("com.github.liouyang19:android-gradle-plugins:1.1.2")
+			from("com.github.liouyang19:android-gradle-plugins:1.1.6")
 		}
 	}
 	
@@ -54,3 +50,4 @@ include(":app")
 include(":theme")
 include(":navigation3")
 include(":permission")
+include(":camera")
