@@ -45,11 +45,12 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "android-common-libraries"
-include(":app")
 include(":theme")
-include(":navigation3")
-include(":permission")
 include(":camera")
-include(":upgrade")
-include(":network")
+include(":bom")
+//include(":app")
+//include(":navigation3")
+//include(":permission")
+//include(":upgrade")
+//include(":network")
 
