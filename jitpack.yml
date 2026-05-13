@@ -1,4 +1,6 @@
 jdk:
   - openjdk11
+before_install:
+  - export JAVA_HOME=$(dirname $(dirname $(update-alternatives --list javac 2>/dev/null | head -1)))
 install:
   - ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal
