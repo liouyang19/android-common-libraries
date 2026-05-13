@@ -1,6 +1,13 @@
+# 指定 Java 版本
 jdk:
   - openjdk11
+
+# 如果需要执行额外命令
 before_install:
-  - export JAVA_HOME=$(dirname $(dirname $(update-alternatives --list javac 2>/dev/null | head -1)))
+  - chmod +x gradlew
+  - echo "Java version:"
+  - java -version
+
+# 如果需要自定义构建命令（可选）
 install:
   - ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal
