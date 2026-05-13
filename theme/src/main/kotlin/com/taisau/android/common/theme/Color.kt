@@ -120,6 +120,7 @@ internal val Red30 = Color(0xFF93000A)
 internal val Red40 = Color(0xFFBA1A1A)
 internal val Red80 = Color(0xFFFFB4AB)
 internal val Red90 = Color(0xFFFFDAD6)
+
 internal val Teal10 = Color(0xFF001F26)
 internal val Teal20 = Color(0xFF02363F)
 internal val Teal30 = Color(0xFF214D56)

@@ -62,7 +62,37 @@ data class CustomThemeColors(
 	val border: Color,
 	val buttonBg: Color,
 	val onAccent: Color = Color.White,
-)
+) {
+	companion object {
+		val DEFAULT = CustomThemeColors(
+			accent = Color(0xFF3B82F6),
+			background = Color(0xFFF5F7FB),
+			surface = Color.White,
+			textPrimary = Color(0xFF1E293B),
+			textSecondary = Color(0xFF475569),
+			border = Color(0xFFE2E8F0),
+			buttonBg = Color(0xFF3B82F6),
+		)
+
+		fun fromSeed(seedColor: Color, darkTheme: Boolean = false): CustomThemeColors {
+			val luminance = 0.299f * seedColor.red + 0.587f * seedColor.green + 0.114f * seedColor.blue
+			return CustomThemeColors(
+				accent = seedColor,
+				onAccent = if (luminance > 0.5f) Color(0xFF1C1B1F) else Color.White,
+				background = if (darkTheme) Color(0xFF1C1B1F) else Color(
+					seedColor.red + (1f - seedColor.red) * 0.92f,
+					seedColor.green + (1f - seedColor.green) * 0.92f,
+					seedColor.blue + (1f - seedColor.blue) * 0.92f,
+				),
+				surface = if (darkTheme) Color(0xFF2B2930) else Color.White,
+				textPrimary = if (darkTheme) Color(0xFFE6E1E5) else Color(0xFF1C1B1F),
+				textSecondary = if (darkTheme) Color(0xFFCAC4D0) else Color(0xFF49454F),
+				border = seedColor.copy(alpha = 0.3f),
+				buttonBg = seedColor,
+			)
+		}
+	}
+}
 
 /**
  * 海洋主题配色方案
@@ -136,18 +166,21 @@ fun colorScheme(
 	ThemeType.CUSTOM -> customThemeColors?.toColorScheme() ?: LightDefaultColorScheme
 }
 
-fun CustomThemeColors.toColorScheme(): ColorScheme = lightColorScheme(
-	primary = accent,
-	onPrimary = onAccent,
-	background = background,
-	onBackground = textPrimary,
-	surface = surface,
-	onSurface = textPrimary,
-	surfaceVariant = buttonBg,
-	outline = border,
-	secondary = textSecondary,
-	onSecondary = onAccent
-)
+fun CustomThemeColors.toColorScheme(darkTheme: Boolean = false): ColorScheme {
+	val base = if (darkTheme) darkColorScheme() else lightColorScheme()
+	return base.copy(
+		primary = accent,
+		onPrimary = onAccent,
+		background = background,
+		onBackground = textPrimary,
+		surface = surface,
+		onSurface = textPrimary,
+		surfaceVariant = buttonBg,
+		outline = border,
+		secondary = textSecondary,
+		onSecondary = onAccent,
+	)
+}
 
 /**
  * 浅色默认主题配色方案
@@ -306,72 +339,33 @@ val LightAndroidBackgroundTheme = BackgroundTheme(color = DarkGreenGray95)
 val DarkAndroidBackgroundTheme = BackgroundTheme(color = Color.Black)
 
 /**
- *  主题主函数，提供完整的主题配置
+ * 主题主函数，提供完整的主题配置
  *
- * @param darkTheme 是否使用深色主题，默认为系统深色模式设置
- * @param androidTheme 是否使用 Android Material Design 风格主题，默认为 false
- * @param disableDynamicTheming 是否禁用动态主题（Material You），默认为 true（禁用）
+ * @param darkTheme 是否使用深色模式
+ * @param themeState 主题状态，通过 [rememberThemeState] 创建，支持 runtime 切换
  * @param content 主题包裹的内容
  */
 @Composable
 fun AppTheme(
 	darkTheme: Boolean = isSystemInDarkTheme(),
-	androidTheme: Boolean = false,
-	disableDynamicTheming: Boolean = true,
-	themeType: ThemeType? = null,
-	customThemeColors: CustomThemeColors? = null,
+	themeState: ThemeState,
 	content: @Composable () -> Unit,
 ) {
-	// 配色方案选择逻辑
-	val colorScheme = when {
-		// 显式指定主题优先（含自定义主题）
-		themeType != null -> colorScheme(themeType, customThemeColors)
-		// 优先使用 Android Material 风格主题
-		androidTheme -> if (darkTheme) DarkAndroidColorScheme else LightAndroidColorScheme
-		// 其次尝试使用动态主题（Android 12+）
-		!disableDynamicTheming && supportsDynamicTheming() -> {
-			val context = LocalContext.current
-			if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+	val colorScheme = if (darkTheme) {
+		DarkAndroidColorScheme
+	} else {
+		when (themeState.themeType) {
+			ThemeType.LIGHT -> LightDefaultColorScheme
+			ThemeType.DARK -> DarkDefaultColorScheme
+			ThemeType.OCEAN -> OceanColorScheme
+			ThemeType.FOREST -> ForestColorScheme
+			ThemeType.SUNSET -> SunsetColorScheme
+			ThemeType.CUSTOM -> themeState.customThemeColors.toColorScheme(darkTheme = false)
 		}
-		// 最后使用默认主题
-		else -> if (darkTheme) DarkDefaultColorScheme else LightDefaultColorScheme
 	}
-	
-	// 渐变颜色配置
-	val emptyGradientColors = GradientColors(container = colorScheme.surfaceColorAtElevation(2.dp))
-	val defaultGradientColors = GradientColors(
-		top = colorScheme.inverseOnSurface,
-		bottom = colorScheme.primaryContainer,
-		container = colorScheme.surface,
-	)
-	val gradientColors = when {
-		androidTheme -> if (darkTheme) DarkAndroidGradientColors else LightAndroidGradientColors
-		!disableDynamicTheming && supportsDynamicTheming() -> emptyGradientColors
-		else -> defaultGradientColors
-	}
-	
-	// 背景主题配置
-	val defaultBackgroundTheme = BackgroundTheme(
-		color = colorScheme.surface,
-		tonalElevation = 2.dp,
-	)
-	val backgroundTheme = when {
-		androidTheme -> if (darkTheme) DarkAndroidBackgroundTheme else LightAndroidBackgroundTheme
-		else -> defaultBackgroundTheme
-	}
-	
-	// 色调主题配置
-	val tintTheme = when {
-		androidTheme -> TintTheme()
-		!disableDynamicTheming && supportsDynamicTheming() -> TintTheme(colorScheme.primary)
-		else -> TintTheme()
-	}
-	//这段代码使用 `CompositionLocalProvider` 将渐变颜色、背景主题和色调主题注入到组件树中，然后包裹 `MaterialTheme` 应用配色方案和字体样式。它实现了主题的层级传递，让子组件可以访问这些主题配置。
-	// 应用所有主题配置到 CompositionLocal
+
 	CompositionLocalProvider(
-		LocalGradientColors provides gradientColors,
-		LocalBackgroundTheme provides backgroundTheme,
-		LocalTintTheme provides tintTheme,
+		LocalThemeState provides themeState,
 	) {
 		MaterialTheme(
 			colorScheme = colorScheme,
@@ -380,13 +374,3 @@ fun AppTheme(
 		)
 	}
 }
-
-/**
- * 检查当前设备是否支持动态主题（Material You）
- * 
- * 动态主题需要 Android 12 (API 31) 或更高版本
- *
- * @return 如果支持动态主题返回 true，否则返回 false
- */
-@ChecksSdkIntAtLeast(api = Build.VERSION_CODES.S)
-fun supportsDynamicTheming() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S

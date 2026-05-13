@@ -3,8 +3,7 @@ pluginManagement {
 		// 优先使用本地缓存
 		mavenLocal()
 		
-		// 国内镜像源
-		maven { setUrl("https://maven.aliyun.com/repository/gradle-plugin") }
+		// 国内镜像�?		maven { setUrl("https://maven.aliyun.com/repository/gradle-plugin") }
 		maven { setUrl("https://maven.aliyun.com/repository/central") }
 		maven { setUrl("https://maven.aliyun.com/repository/google") }
 		
@@ -39,7 +38,7 @@ dependencyResolutionManagement {
 	}
 	versionCatalogs {
 		create("libs") {
-			from("com.github.liouyang19:android-gradle-plugins:1.1.6")
+			from("com.github.liouyang19.android-gradle-plugins:version-catalog:1.1.7")
 		}
 	}
 	
@@ -51,3 +50,6 @@ include(":theme")
 include(":navigation3")
 include(":permission")
 include(":camera")
+include(":upgrade")
+include(":network")
+
