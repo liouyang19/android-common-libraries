@@ -3,11 +3,13 @@ jdk:
 
 before_install:
   - chmod +x gradlew
+  - curl -sL "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse" -o /tmp/jdk.tar.gz
+  - mkdir -p /tmp/jdk21
+  - tar -xzf /tmp/jdk.tar.gz -C /tmp/jdk21 --strip-components=1
+  - rm /tmp/jdk.tar.gz
+  - rm -rf "$JAVA_HOME" 2>/dev/null; mkdir -p "$(dirname "$JAVA_HOME")" && ln -s /tmp/jdk21 "$JAVA_HOME"
+  - "$JAVA_HOME/bin/java" -version
+  - ./gradlew -v
 
 install:
-  - export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
-  - export PATH=$JAVA_HOME/bin:$PATH
-  - echo $JAVA_HOME
-  - ls $JAVA_HOME
-  - java -version
-  - ./gradlew publishToMavenLocal -x :theme:lintAnalyzeDebug -x test --no-daemon --stacktrace
+  - ./gradlew :theme:publishToMavenLocal -x :theme:lintAnalyzeDebug -x test --no-daemon --stacktrace
