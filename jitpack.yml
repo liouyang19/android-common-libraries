@@ -1,10 +1,15 @@
-jdk:
-  - openjdk17
-
 before_install:
   - chmod +x gradlew
+  - curl -sL "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse" -o /tmp/jdk.tar.gz
+  - mkdir -p /tmp/jdk21
+  - tar -xzf /tmp/jdk.tar.gz -C /tmp/jdk21 --strip-components=1
+  - rm /tmp/jdk.tar.gz
+  - export JAVA_HOME=/tmp/jdk21
+  - export PATH="/tmp/jdk21/bin:$PATH"
   - java -version
   - ./gradlew -v
 
 install:
+  - export JAVA_HOME=/tmp/jdk21
+  - export PATH="/tmp/jdk21/bin:$PATH"
   - ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal -x :theme:lintAnalyzeDebug -x test -x androidTest --no-daemon --stacktrace --info
