@@ -2,10 +2,11 @@ jdk:
   - openjdk21
 
 before_install:
+  - sdk install java 21.0.2-open
+  - sdk use java 21.0.2-open
+  - export JAVA_HOME=$SDKMAN_CANDIDATES_DIR/java/current
+  - export PATH=$JAVA_HOME/bin:$PATH
   - chmod +x gradlew
-  - find /usr/lib/jvm -name "bin"
+
 install:
-  # 使用 readlink -f 彻底解析软链接，找到 JDK 的真实根目录
-  - export JAVA_HOME=$(readlink -f $(which java) | sed "s:/bin/java::")
-  # 并在同一行执行，确保环境变量对该进程绝对有效
   - ./gradlew publishToMavenLocal -x :theme:lintAnalyzeDebug -x test --no-daemon --stacktrace
