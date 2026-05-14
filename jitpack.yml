@@ -3,9 +3,7 @@ jdk:
 
 before_install:
   - chmod +x gradlew
-  - unset JAVA_HOME
-  - java -version
-  - ./gradlew -v
+  - . $HOME/.sdkman/bin/sdkman-init.sh && sdk use java 21.0.2-open && java -version && ./gradlew -v
 
 install:
-  - unset JAVA_HOME && ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal -x :theme:lintAnalyzeDebug -x test -x androidTest --no-daemon --stacktrace --info
+  - . $HOME/.sdkman/bin/sdkman-init.sh && sdk use java 21.0.2-open && ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal -x :theme:lintAnalyzeDebug -x test -x androidTest --no-daemon --stacktrace --info
