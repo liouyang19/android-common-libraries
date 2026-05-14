@@ -1,5 +1,5 @@
 jdk:
-  - openjdk21
+  - openjdk17
 
 before_install:
   - chmod +x gradlew
@@ -7,10 +7,4 @@ before_install:
   - ./gradlew -v
 
 install:
-  - ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal \
-    -x :theme:lintAnalyzeDebug \
-    -x test \
-    -x androidTest \
-    --no-daemon \
-    --stacktrace \
-    --info
+  - ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal -x :theme:lintAnalyzeDebug -x test -x androidTest --no-daemon --stacktrace --info
