@@ -3,7 +3,11 @@ jdk:
 
 before_install:
   - chmod +x gradlew
-
+  - export JAVA_HOME=/home/jitpack/.sdkman/candidates/java/current
+  - export PATH=$JAVA_HOME/bin:$PATH
+  - java -version
 
 install:
-  - ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal -x :theme:lintAnalyzeDebug -x test -x androidTest --no-daemon --stacktrace --info
+  - export JAVA_HOME=/home/jitpack/.sdkman/candidates/java/current
+  - export PATH=$JAVA_HOME/bin:$PATH
+  - ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal -x :theme:lintAnalyzeDebug -x test -x androidTest --no-daemon --stacktrace --inf
