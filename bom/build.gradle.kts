@@ -2,7 +2,8 @@ plugins {
 	`java-platform`
 	`maven-publish`
 }
-
+apply(from = "../gradle/git-tag-version.gradle.kts")
+val versionNameFromTags: String by extra
 javaPlatform {
 	allowDependencies()
 }
@@ -20,7 +21,7 @@ publishing {
 
 			groupId = rootProject.group.toString()
 			artifactId = "bom"
-			version = rootProject.version.toString()
+			version = versionNameFromTags
 		}
 	}
 }

@@ -4,6 +4,9 @@ plugins {
 	id("maven-publish")
 }
 
+apply(from = "../gradle/git-tag-version.gradle.kts")
+val versionNameFromTags: String by extra
+
 android {
 	namespace = "com.taisau.android.common.theme"
 
@@ -29,7 +32,7 @@ afterEvaluate {
 
 				groupId = "com.github.liouyang19.android-common-libraries"
 				artifactId = "theme"
-				version = "0.1.0"
+				version = versionNameFromTags
 			}
 		}
 	}

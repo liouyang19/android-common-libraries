@@ -1,12 +1,9 @@
 # 指定 Java 版本
 jdk:
-  - openjdk11
-
-# 如果需要执行额外命令
+  - openjdk21
 before_install:
   - chmod +x gradlew
-  - echo "Java version:"
-  - java -version
+
 
 # 如果需要自定义构建命令（可选）
 install:
