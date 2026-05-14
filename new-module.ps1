@@ -3,9 +3,7 @@ param(
     [string]$Name,
 
     [ValidateSet("library", "compose")]
-    [string]$Type = "library",
-
-    [switch]$Publish
+    [string]$Type = "library"
 )
 
 $repo = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -41,38 +39,12 @@ $plugin = if ($Type -eq "compose") {
 $lines = @(
     'plugins {'
     $plugin
-    if ($Publish) { '    id("maven-publish")' }
     '}'
     ''
     'android {'
     "    namespace = ""$pkg"""
-    if ($Publish) {
-        ''
-        '    publishing {'
-        '        singleVariant("release") {'
-        '            withSourcesJar()'
-        '            withJavadocJar()'
-        '        }'
-        '    }'
-    }
     '}'
 )
-
-if ($Publish) {
-    $lines += ''
-    $lines += 'afterEvaluate {'
-    $lines += '    publishing {'
-    $lines += '        publications {'
-    $lines += '            create<MavenPublication>("release") {'
-    $lines += '                from(components["release"])'
-    $lines += '                groupId = "com.github.liouyang19.android-common-libraries"'
-    $lines += "                artifactId = ""$Name"""
-    $lines += '                version = "0.1.0"'
-    $lines += '            }'
-    $lines += '        }'
-    $lines += '    }'
-    $lines += '}'
-}
 
 Set-Content -Path "$moduleDir\build.gradle.kts" -Value ($lines -join "`r`n")
 

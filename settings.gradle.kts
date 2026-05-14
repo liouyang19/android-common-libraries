@@ -1,6 +1,6 @@
 pluginManagement {
 	repositories {
-		//mavenLocal()
+	//	mavenLocal()
 		maven { setUrl("https://www.jitpack.io") }
 		gradlePluginPortal()
 		google {
@@ -41,7 +41,7 @@ dependencyResolutionManagement {
 	}
 	versionCatalogs {
 		create("libs") {
-			from("com.github.liouyang19.android-gradle-plugins:version-catalog:1.1.7")
+			from("com.github.liouyang19.android-gradle-plugins:version-catalog:1.2.2")
 		}
 	}
 	
@@ -49,8 +49,8 @@ dependencyResolutionManagement {
 
 rootProject.name = "android-common-libraries"
 include(":theme")
-//include(":camera")
-//include(":bom")
+include(":camera")
+include(":bom")
 //include(":app")
 //include(":navigation3")
 //include(":permission")

@@ -7,9 +7,14 @@ import com.taisau.android.common.camera.camera2.Camera2Impl
 import com.taisau.android.common.camera.core.ICamera
 import com.taisau.android.common.camera.core.Resolution
 import com.taisau.android.common.camera.core.UseCase
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.internal.resumeCancellableWith
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.coroutines.resume
@@ -107,30 +112,32 @@ class ImageCaptureUseCase private constructor(
 			?: return ImageCaptureResult.Error(IllegalStateException("Camera not available"))
 		
 		return suspendCancellableCoroutine { continuation ->
-			try {
-				// Camera1的capture使用内部方法
-				camera.capture(captureSurface ?: throw IllegalStateException("No capture surface")) { data ->
-					try {
-						FileOutputStream(outputFile).use { fos ->
-							fos.write(data)
+			CoroutineScope(continuation.context).launch {
+				try {
+					camera.capture(captureSurface ?: throw IllegalStateException("No capture surface")) { data ->
+						try {
+							FileOutputStream(outputFile).use { fos ->
+								fos.write(data)
+							}
+							val result = ImageCaptureResult.Success(outputFile.absolutePath)
+							_captureResult.value = result
+							continuation.resume(result)
+						} catch (e: Exception) {
+							val result = ImageCaptureResult.Error(e)
+							_captureResult.value = result
+							continuation.resumeWith(Result.failure(e))
 						}
-						val result = ImageCaptureResult.Success(outputFile.absolutePath)
-						_captureResult.value = result
-						continuation.resume(result)
-					} catch (e: Exception) {
-						val result = ImageCaptureResult.Error(e)
-						_captureResult.value = result
-						continuation.resumeWith(Result.failure(e))
 					}
+				} catch (e: Exception) {
+					val result = ImageCaptureResult.Error(e)
+					_captureResult.value = result
+					continuation.resumeWith(Result.failure(e))
 				}
-			} catch (e: Exception) {
-				val result = ImageCaptureResult.Error(e)
-				_captureResult.value = result
-				continuation.resumeWith(Result.failure(e))
 			}
 		}
 	}
 	
+	@OptIn(InternalCoroutinesApi::class)
 	private suspend fun captureWithCamera2(outputFile: File): ImageCaptureResult {
 		val camera = currentCamera as? Camera2Impl
 			?: return ImageCaptureResult.Error(IllegalStateException("Camera not available"))
@@ -172,10 +179,20 @@ class ImageCaptureUseCase private constructor(
 				}
 			}, null)
 			
-			camera.capture(tempReader.surface) {}
+			CoroutineScope(continuation.context).launch {
+				try {
+					camera.capture(tempReader.surface) {}
+				} catch (e: Exception) {
+					val result = ImageCaptureResult.Error(e)
+					_captureResult.value = result
+					if (continuation.isActive) {
+						continuation.resumeWith(Result.failure(e))
+					}
+				}
+			}
 		}
 	}
-	
+
 	class Builder : UseCase.Builder<ImageCaptureUseCase>() {
 		var targetResolution: Resolution? = null
 			private set

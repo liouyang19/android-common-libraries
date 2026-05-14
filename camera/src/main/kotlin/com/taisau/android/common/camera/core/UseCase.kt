@@ -5,8 +5,7 @@ import android.view.Surface
 
 abstract class UseCase {
 	
-	protected var isActive = false
-		private set
+	private var _isActive = false
 	
 	/** 该UseCase需要的Surface列表 */
 	open val requiredSurfaces: List<Surface>
@@ -17,16 +16,16 @@ abstract class UseCase {
 	
 	/** 启动UseCase */
 	open suspend fun start() {
-		isActive = true
+		_isActive = true
 	}
 	
 	/** 停止UseCase */
 	open suspend fun stop() {
-		isActive = false
+		_isActive = false
 	}
 	
 	/** 是否活跃 */
-	fun isActive(): Boolean = isActive
+	fun isActive(): Boolean = _isActive
 	
 	/** Builder基类 */
 	abstract class Builder<T : UseCase> {
