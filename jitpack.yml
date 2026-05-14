@@ -1,9 +1,10 @@
 jdk:
-  - openjdk21
+  - openjdk17
 
 before_install:
   - chmod +x gradlew
-  - . $HOME/.sdkman/bin/sdkman-init.sh && sdk use java 21.0.2-open && java -version && ./gradlew -v
+  - java -version
+  - ./gradlew -v
 
 install:
-  - . $HOME/.sdkman/bin/sdkman-init.sh && sdk use java 21.0.2-open && ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal -x :theme:lintAnalyzeDebug -x test -x androidTest --no-daemon --stacktrace --info
+  - ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal -x :theme:lintAnalyzeDebug -x test -x androidTest --no-daemon --stacktrace --info
