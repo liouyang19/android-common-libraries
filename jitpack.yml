@@ -3,11 +3,8 @@ jdk:
 
 before_install:
   - chmod +x gradlew
-  - export JAVA_HOME=/home/jitpack/.sdkman/candidates/java/current
-  - export PATH=$JAVA_HOME/bin:$PATH
-  - java -version
 
 install:
-  - export JAVA_HOME=/home/jitpack/.sdkman/candidates/java/current
-  - export PATH=$JAVA_HOME/bin:$PATH
-  - ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal -x :theme:lintAnalyzeDebug -x test -x androidTest --no-daemon --stacktrace --inf
+  # 1. 彻底绕过 SDKMan 的软链接，找到真实的 JDK 根目录
+  # 2. 直接执行 publishToMavenLocal，这是 maven-publish 插件的标准任务
+  - export JAVA_HOME=$(readlink -f $(which java) | sed "s:/bin/java::") && ./gradlew publishToMavenLocal -x :theme:lintAnalyzeDebug -x test --no-daemon
