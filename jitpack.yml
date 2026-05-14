@@ -5,6 +5,5 @@ before_install:
   - chmod +x gradlew
 
 install:
-  # 1. 彻底绕过 SDKMan 的软链接，找到真实的 JDK 根目录
-  # 2. 直接执行 publishToMavenLocal，这是 maven-publish 插件的标准任务
-  - export JAVA_HOME=$(readlink -f $(which java) | sed "s:/bin/java::") && ./gradlew publishToMavenLocal -x :theme:lintAnalyzeDebug -x test --no-daemon
+  # 强制指向 Linux 标准 JDK 21 路径，不依赖 sdkman 的动态安装
+  - export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 && ./gradlew publishToMavenLocal -x :theme:lintAnalyzeDebug -x test --no-daemon
