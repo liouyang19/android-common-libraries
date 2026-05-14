@@ -6,10 +6,17 @@ before_install:
   - rm /tmp/jdk.tar.gz
   - export JAVA_HOME=/tmp/jdk21
   - export PATH="/tmp/jdk21/bin:$PATH"
-  - java -version
+  - echo "JAVA_HOME=$JAVA_HOME"
+  - ls -la /tmp/jdk21/bin/java
+  - file /tmp/jdk21/bin/java
+  - /tmp/jdk21/bin/java -version
+  - sh -c '[ -x /tmp/jdk21/bin/java ] && echo "sh: -x OK" || echo "sh: -x FAILED"'
   - ./gradlew -v
 
 install:
   - export JAVA_HOME=/tmp/jdk21
   - export PATH="/tmp/jdk21/bin:$PATH"
+  - echo "JAVA_HOME=$JAVA_HOME"
+  - ls -la /tmp/jdk21/bin/java
+  - sh -c '[ -x /tmp/jdk21/bin/java ] && echo "sh: -x OK" || echo "sh: -x FAILED"'
   - ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal -x :theme:lintAnalyzeDebug -x test -x androidTest --no-daemon --stacktrace --info
