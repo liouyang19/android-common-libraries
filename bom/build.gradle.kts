@@ -20,7 +20,7 @@ publishing {
 			from(components["javaPlatform"])
 
 			groupId = rootProject.group.toString()
-			artifactId = "bom"
+			artifactId = "android-common-libraries-bom"
 			version = versionNameFromTags
 		}
 	}

@@ -1,6 +1,6 @@
 plugins {
 	alias(libs.plugins.taisau.android.library.compose)
-	id("maven-publish")
+	`maven-publish`
 }
 
 apply(from = "../gradle/git-tag-version.gradle.kts")
@@ -21,8 +21,8 @@ afterEvaluate {
 		publications {
 			create<MavenPublication>("release") {
 				from(components["release"])
-				groupId = "com.github.liouyang19.android-common-libraries"
-				artifactId = "theme"
+				groupId = rootProject.group.toString()
+				artifactId = "android-common-libraries-theme"
 				version = versionNameFromTags
 			}
 		}
