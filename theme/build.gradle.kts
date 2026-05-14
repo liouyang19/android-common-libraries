@@ -1,6 +1,5 @@
 plugins {
 	alias(libs.plugins.taisau.android.library.compose)
-	alias(libs.plugins.kotlin.dokka)
 	id("maven-publish")
 }
 
@@ -17,30 +16,16 @@ android {
 	}
 }
 
-val dokkaJavadocJar by tasks.registering(Jar::class) {
-	dependsOn(tasks.dokkaGenerateHtml)
-	from(layout.buildDirectory.dir("dokka/html"))
-	archiveClassifier.set("javadoc")
-}
-
 afterEvaluate {
 	publishing {
 		publications {
 			create<MavenPublication>("release") {
 				from(components["release"])
-				artifact(dokkaJavadocJar)
-
 				groupId = "com.github.liouyang19.android-common-libraries"
 				artifactId = "theme"
 				version = versionNameFromTags
 			}
 		}
-	}
-}
-
-dokka {
-	dokkaSourceSets.configureEach {
-		includes.from("Module.md")
 	}
 }
 

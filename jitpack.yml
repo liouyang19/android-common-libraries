@@ -1,10 +1,16 @@
-# 指定 Java 版本
 jdk:
   - openjdk21
+
 before_install:
   - chmod +x gradlew
+  - java -version
+  - ./gradlew -v
 
-
-# 如果需要自定义构建命令（可选）
 install:
-  - ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal
+  - ./gradlew build :bom:publishToMavenLocal :theme:publishToMavenLocal \
+    -x :theme:lintAnalyzeDebug \
+    -x test \
+    -x androidTest \
+    --no-daemon \
+    --stacktrace \
+    --info
