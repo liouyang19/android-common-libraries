@@ -2,10 +2,12 @@ jdk:
   - openjdk21
 
 before_install:
-  - unset JAVA_HOME
-  - export PATH=/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH
-  - java -version
   - chmod +x gradlew
 
 install:
+  - export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
+  - export PATH=$JAVA_HOME/bin:$PATH
+  - echo $JAVA_HOME
+  - ls $JAVA_HOME
+  - java -version
   - ./gradlew publishToMavenLocal -x :theme:lintAnalyzeDebug -x test --no-daemon --stacktrace
