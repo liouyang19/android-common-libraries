@@ -22,7 +22,7 @@ afterEvaluate {
 			create<MavenPublication>("release") {
 				from(components["release"])
 				groupId = rootProject.group.toString()
-				artifactId = "android-common-libraries-theme"
+				artifactId = "theme"
 				version = versionNameFromTags
 			}
 		}

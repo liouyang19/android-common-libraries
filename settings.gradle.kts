@@ -1,6 +1,6 @@
 pluginManagement {
 	repositories {
-		mavenLocal()
+		//mavenLocal()
 		maven { setUrl("https://www.jitpack.io") }
 		gradlePluginPortal()
 		google {
@@ -16,23 +16,20 @@ pluginManagement {
 		maven { setUrl("https://maven.aliyun.com/repository/central") }
 		maven { setUrl("https://maven.aliyun.com/repository/google") }
 	}
-	
 	resolutionStrategy {
 		eachPlugin {
-			// 当 Gradle 尝试加载 id 为 com.taisau 开头的插件时
-			if (requested.id.namespace?.startsWith("com.taisau") == true) {
-				// 强制让它去 JitPack 的真实路径下载
-				// 对应图片中的库：com.github.liouyang19:android-gradle-plugins
-				useModule("com.github.liouyang19:android-gradle-plugins:${requested.version}")
+			if (requested.id.id.startsWith("com.taisau.")) {
+				useModule("com.github.liouyang19.android-gradle-plugins:taisau-convention-plugins:${requested.version}")
 			}
 		}
 	}
+
 }
 
 dependencyResolutionManagement {
 	repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
 	repositories {
-		mavenLocal()
+		//mavenLocal()
 		maven { setUrl("https://www.jitpack.io") }
 		google()
 		mavenCentral()
@@ -52,8 +49,8 @@ dependencyResolutionManagement {
 
 rootProject.name = "android-common-libraries"
 include(":theme")
-include(":camera")
-include(":bom")
+//include(":camera")
+//include(":bom")
 //include(":app")
 //include(":navigation3")
 //include(":permission")
