@@ -3,7 +3,9 @@ jdk:
 
 before_install:
   - chmod +x gradlew
-
+  - find /usr/lib/jvm -name "bin"
 install:
-  # 强制指向 Linux 标准 JDK 21 路径，不依赖 sdkman 的动态安装
-  - export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 && ./gradlew publishToMavenLocal -x :theme:lintAnalyzeDebug -x test --no-daemon
+  # 使用 readlink -f 彻底解析软链接，找到 JDK 的真实根目录
+  - export JAVA_HOME=$(readlink -f $(which java) | sed "s:/bin/java::")
+  # 并在同一行执行，确保环境变量对该进程绝对有效
+  - ./gradlew publishToMavenLocal -x :theme:lintAnalyzeDebug -x test --no-daemon --stacktrace
