@@ -57,4 +57,6 @@ include(":permission")
 include(":upgrade")
 include(":download")
 include(":network")
+include(":serialport")
+include(":rabbitmq")
 
