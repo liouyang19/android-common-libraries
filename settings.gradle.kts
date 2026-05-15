@@ -41,7 +41,7 @@ dependencyResolutionManagement {
 	}
 	versionCatalogs {
 		create("libs") {
-			from("com.github.liouyang19.android-gradle-plugins:version-catalog:1.2.2")
+			from("com.github.liouyang19.android-gradle-plugins:version-catalog:1.2.3")
 		}
 	}
 	
@@ -51,9 +51,9 @@ rootProject.name = "android-common-libraries"
 include(":theme")
 include(":camera")
 include(":bom")
-//include(":app")
+
 //include(":navigation3")
-//include(":permission")
-//include(":upgrade")
 //include(":network")
+include(":permission")
+include(":upgrade")
 
