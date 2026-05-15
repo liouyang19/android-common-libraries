@@ -1,6 +1,6 @@
 plugins {
 	alias(libs.plugins.taisau.android.library.compose)
-	id("maven-publish")
+	`maven-publish`
 }
 
 android {
