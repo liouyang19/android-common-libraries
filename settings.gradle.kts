@@ -56,4 +56,5 @@ include(":bom")
 //include(":network")
 include(":permission")
 include(":upgrade")
+include(":download")
 

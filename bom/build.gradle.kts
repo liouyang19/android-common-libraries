@@ -12,5 +12,6 @@ dependencies {
 		api(project(":camera"))
 		api(project(":permission"))
 		api(project(":upgrade"))
+		api(project(":download"))
 	}
 }

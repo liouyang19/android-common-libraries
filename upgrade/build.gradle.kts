@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.taisau.android.library.compose)
+    alias(libs.plugins.taisau.android.library)
 }
 
 android {
