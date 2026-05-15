@@ -1,9 +1,17 @@
 plugins {
 	alias(libs.plugins.taisau.android.library.compose)
+	id("maven-publish")
 }
 
 android {
 	namespace = "com.taisau.android.common.theme"
+
+	publishing {
+		singleVariant("release") {
+			withSourcesJar()
+			withJavadocJar()
+		}
+	}
 }
 
 dependencies {
@@ -12,5 +20,18 @@ dependencies {
 	implementation(libs.androidx.core.splashscreen)
 }
 
-apply(from = rootProject.projectDir.resolve("gradle/publish-library.gradle.kts"))
+val versionNameFromTags: String by extra
+
+afterEvaluate {
+	publishing {
+		publications {
+			register<MavenPublication>("release") {
+				from(components["release"])
+				groupId = rootProject.group.toString()
+				artifactId = project.name
+				version = versionNameFromTags
+			}
+		}
+	}
+}
 
