@@ -5,4 +5,4 @@ before_install:
   - chmod +x gradlew
 
 install:
-  - ./gradlew publishToMavenLocal -x lintAnalyzeDebug -x test --no-daemon --stacktrace
+  - ./gradlew clean publishToMavenLocal -x lintAnalyzeDebug -x test --no-daemon --stacktrace
