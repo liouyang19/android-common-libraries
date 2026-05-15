@@ -12,3 +12,5 @@ dependencies {
 	implementation(libs.androidx.core.splashscreen)
 }
 
+apply(from = rootProject.projectDir.resolve("gradle/publish-library.gradle.kts"))
+

@@ -9,3 +9,5 @@ android {
 dependencies {
     implementation(libs.kotlinx.coroutines.core)
 }
+
+apply(from = rootProject.projectDir.resolve("gradle/publish-library.gradle.kts"))

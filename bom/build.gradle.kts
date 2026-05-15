@@ -1,5 +1,6 @@
 plugins {
 	`java-platform`
+	`maven-publish`
 }
 
 javaPlatform {
@@ -16,5 +17,16 @@ dependencies {
 		api("com.github.liouyang19.android-common-libraries:upgrade:${versionNameFromTags}")
 		api("com.github.liouyang19.android-common-libraries:download:${versionNameFromTags}")
 		api("com.github.liouyang19.android-common-libraries:network:${versionNameFromTags}")
+	}
+}
+
+publishing {
+	publications {
+		register<MavenPublication>("bom") {
+			from(components["javaPlatform"])
+			groupId = rootProject.group.toString()
+			artifactId = "${rootProject.name}-${project.name}"
+			version = versionNameFromTags
+		}
 	}
 }

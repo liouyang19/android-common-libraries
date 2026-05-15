@@ -9,3 +9,5 @@ android {
 dependencies {
    implementation(libs.accompanist.permissionsaccompanist.permissions)
 }
+
+apply(from = rootProject.projectDir.resolve("gradle/publish-library.gradle.kts"))
