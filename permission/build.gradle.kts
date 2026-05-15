@@ -7,5 +7,5 @@ android {
 }
 
 dependencies {
-    implementation(libs.accompanist.permissions)
+   implementation(libs.accompanist.permissionsaccompanist.permissions)
 }

@@ -1,6 +1,6 @@
 pluginManagement {
 	repositories {
-	//	mavenLocal()
+		mavenLocal()
 		maven { setUrl("https://www.jitpack.io") }
 		gradlePluginPortal()
 		google {
@@ -29,7 +29,7 @@ pluginManagement {
 dependencyResolutionManagement {
 	repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
 	repositories {
-		//mavenLocal()
+		mavenLocal()
 		maven { setUrl("https://www.jitpack.io") }
 		google()
 		mavenCentral()
@@ -41,7 +41,7 @@ dependencyResolutionManagement {
 	}
 	versionCatalogs {
 		create("libs") {
-			from("com.github.liouyang19.android-gradle-plugins:version-catalog:1.2.3")
+			from("com.github.liouyang19.android-gradle-plugins:version-catalog:1.2.5")
 		}
 	}
 	
@@ -53,8 +53,8 @@ include(":camera")
 include(":bom")
 
 //include(":navigation3")
-//include(":network")
 include(":permission")
 include(":upgrade")
 include(":download")
+include(":network")
 

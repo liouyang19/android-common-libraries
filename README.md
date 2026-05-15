@@ -13,6 +13,7 @@ Android 通用库集合 — 多模块 Kotlin 项目，即开即用，降低 App 
 | `:permission` | ✅ 新增 | Android 权限请求封装，处理 Android 13+ | Accompanist + Compose |
 | `:upgrade` | ✅ 新增 | App 更新库（检测、下载、安装） | Builder + DownloadManager |
 | `:download` | ✅ 新增 | 文件下载库（断点续传、分片下载） | Builder + Coroutine |
+| `:network` | ✅ 新增 | 网络连接状态监测（WiFi/移动/以太网） | Coroutine + Flow |
 | `:bom` | ✅ 新增 | Bill of Materials 版本管理 | java-platform |
 
 ---
@@ -45,6 +46,7 @@ dependencies {
     implementation("com.github.liouyang19.android-common-libraries:permission")
     implementation("com.github.liouyang19.android-common-libraries:upgrade")
     implementation("com.github.liouyang19.android-common-libraries:download")
+    implementation("com.github.liouyang19.android-common-libraries:network")
 }
 ```
 
@@ -56,6 +58,7 @@ implementation("com.github.liouyang19.android-common-libraries:theme:1.2.2")
 implementation("com.github.liouyang19.android-common-libraries:permission:1.2.2")
 implementation("com.github.liouyang19.android-common-libraries:upgrade:1.2.2")
 implementation("com.github.liouyang19.android-common-libraries:download:1.2.2")
+implementation("com.github.liouyang19.android-common-libraries:network:1.2.2")
 ```
 
 ---
@@ -106,6 +109,17 @@ val task = manager.download(lifecycleScope, url, "bigfile.zip") { downloaded, to
 }
 ```
 
+### network — 网络监测
+
+```kotlin
+val monitor = NetworkMonitor.getInstance(this)
+lifecycleScope.launch {
+    monitor.info.collect { info ->
+        if (!info.isConnected) showToast("网络不可用")
+    }
+}
+```
+
 ---
 
 ## 本地构建
@@ -142,6 +156,7 @@ android-common-libraries/
 ├── permission/      → com.taisau.android.common.permission
 ├── upgrade/         → com.taisau.android.common.upgrade
 ├── download/        → com.taisau.android.common.download
+├── network/         → com.taisau.android.common.network
 ├── bom/             → Bill of Materials
 └── new-module.ps1   # 一键创建新模块
 ```

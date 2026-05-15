@@ -6,12 +6,15 @@ javaPlatform {
 	allowDependencies()
 }
 
+val versionNameFromTags: String by extra
+
 dependencies {
 	constraints {
-		api(project(":theme"))
-		api(project(":camera"))
-		api(project(":permission"))
-		api(project(":upgrade"))
-		api(project(":download"))
+		api("com.github.liouyang19.android-common-libraries:theme:${versionNameFromTags}")
+		api("com.github.liouyang19.android-common-libraries:camera:${versionNameFromTags}")
+		api("com.github.liouyang19.android-common-libraries:permission:${versionNameFromTags}")
+		api("com.github.liouyang19.android-common-libraries:upgrade:${versionNameFromTags}")
+		api("com.github.liouyang19.android-common-libraries:download:${versionNameFromTags}")
+		api("com.github.liouyang19.android-common-libraries:network:${versionNameFromTags}")
 	}
 }
