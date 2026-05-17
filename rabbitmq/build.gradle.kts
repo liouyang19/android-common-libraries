@@ -1,5 +1,7 @@
 plugins {
     alias(libs.plugins.taisau.android.library)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
     `maven-publish`
 }
 
@@ -15,6 +17,8 @@ android {
 dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    implementation("com.rabbitmq:amqp-client:5.16.0")
+    implementation(libs.kotlinx.serialization.json)
 }
 
 val versionNameFromTags: String by extra
