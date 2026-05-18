@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.taisau.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
     `maven-publish`
 }

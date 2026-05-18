@@ -1,7 +1,7 @@
 plugins {
     alias(libs.plugins.taisau.android.library)
-    alias(libs.plugins.kotlin.android)
     id("cpp")
+    `maven-publish`
 }
 
 android {
@@ -12,9 +12,32 @@ android {
             version = "3.22.1"
         }
     }
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
     
 }
 
 dependencies{
+    implementation(libs.androidx.core.ktx)
 
+}
+
+
+val versionNameFromTags: String by extra
+
+afterEvaluate {
+    publishing {
+        publications {
+            register<MavenPublication>("release") {
+                from(components["release"])
+                groupId = rootProject.group.toString()
+                artifactId = project.name
+                version = versionNameFromTags
+            }
+        }
+    }
 }

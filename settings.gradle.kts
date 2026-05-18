@@ -41,7 +41,7 @@ dependencyResolutionManagement {
 	}
 	versionCatalogs {
 		create("libs") {
-			from("com.github.liouyang19.android-gradle-plugins:version-catalog:1.3.2")
+			from("com.github.liouyang19.android-gradle-plugins:version-catalog:1.3.4")
 		}
 	}
 	
