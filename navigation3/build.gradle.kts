@@ -1,35 +1,25 @@
-//plugins {
-//	alias(libs.plugins.android.library)
-//	alias(libs.plugins.kotlin.android)
-//}
-//
-//android {
-//	namespace = "com.taisau.android.common.navigation3"
-//	compileSdk {
-//		version = release(36) {
-//			minorApiLevel = 1
-//		}
-//	}
-//
-//	defaultConfig {
-//		minSdk = 26
-//
-//		testInstrumentationRunner = "android.support.test.runner.AndroidJUnitRunner"
-//		consumerProguardFiles("consumer-rules.pro")
-//	}
-//	compileOptions {
-//		sourceCompatibility = JavaVersion.VERSION_11
-//		targetCompatibility = JavaVersion.VERSION_11
-//	}
-//	kotlinOptions {
-//		jvmTarget = "11"
-//	}
-//
-//}
-//
-//dependencies {
-//	implementation(libs.appcompat.v7)
-//	testImplementation(libs.junit)
-//	androidTestImplementation(libs.espresso.core)
-//	androidTestImplementation(libs.runner)
-//}
+import com.android.tools.r8.internal.im
+
+plugins {
+	alias(libs.plugins.taisau.android.library.compose)
+	alias(libs.plugins.kotlin.serialization)
+}
+
+android {
+	namespace = "com.taisau.android.common.navigation3"
+}
+
+dependencies{
+	api(libs.androidx.navigation3.runtime)
+	implementation(libs.androidx.savedstate.compose)
+	implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+	testImplementation(libs.truth)
+	androidTestImplementation(libs.androidx.compose.ui.test)
+	androidTestImplementation(libs.androidx.test.ext)
+	androidTestImplementation(libs.androidx.compose.ui.testManifest)
+	androidTestImplementation(libs.androidx.lifecycle.viewmodel.testing)
+	androidTestImplementation(libs.truth)
+
+
+}
+
