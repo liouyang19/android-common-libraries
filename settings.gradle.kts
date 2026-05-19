@@ -58,4 +58,6 @@ include(":download")
 include(":network")
 include(":serialport")
 include(":rabbitmq")
+include(":utils-android")
+include(":utils-jvm")
 
