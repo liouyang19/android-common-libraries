@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.taisau.android.common.upgrade"
+    namespace = "com.taisau.android.common.mqtt"
 
     publishing {
         singleVariant("release") {
@@ -15,8 +15,9 @@ android {
 
 dependencies {
     implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.work.runtime)
+    implementation(libs.kotlinx.coroutines.android)
+    //implementation(libs.mqtt.client)
+    implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
 }
 
 val versionNameFromTags: String by extra

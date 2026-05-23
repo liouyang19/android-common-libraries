@@ -2,6 +2,10 @@ pluginManagement {
 	repositories {
 		mavenLocal()
 		maven { setUrl("https://www.jitpack.io") }
+		// 阿里云镜像（仅本地开发用，JitPack 环境不可达）
+		maven { setUrl("https://maven.aliyun.com/repository/gradle-plugin") }
+		maven { setUrl("https://maven.aliyun.com/repository/central") }
+		maven { setUrl("https://maven.aliyun.com/repository/google") }
 		gradlePluginPortal()
 		google {
 			content {
@@ -11,10 +15,7 @@ pluginManagement {
 			}
 		}
 		mavenCentral()
-		// 阿里云镜像（仅本地开发用，JitPack 环境不可达）
-		maven { setUrl("https://maven.aliyun.com/repository/gradle-plugin") }
-		maven { setUrl("https://maven.aliyun.com/repository/central") }
-		maven { setUrl("https://maven.aliyun.com/repository/google") }
+
 	}
 	resolutionStrategy {
 		eachPlugin {
@@ -31,17 +32,18 @@ dependencyResolutionManagement {
 	repositories {
 		mavenLocal()
 		maven { setUrl("https://www.jitpack.io") }
-		google()
-		mavenCentral()
-		gradlePluginPortal()
 		// 阿里云镜像（仅本地开发用，JitPack 环境不可达）
 		maven { setUrl("https://maven.aliyun.com/repository/public") }
 		maven { setUrl("https://maven.aliyun.com/repository/central") }
 		maven { setUrl("https://maven.aliyun.com/repository/google") }
+		google()
+		mavenCentral()
+		gradlePluginPortal()
+
 	}
 	versionCatalogs {
 		create("libs") {
-			from("com.github.liouyang19.android-gradle-plugins:version-catalog:1.3.6")
+			from("com.github.liouyang19.android-gradle-plugins:version-catalog:1.3.7")
 		}
 	}
 	
@@ -60,4 +62,6 @@ include(":serialport")
 include(":rabbitmq")
 include(":utils-android")
 include(":utils-jvm")
+include(":mqtt")
+
 
