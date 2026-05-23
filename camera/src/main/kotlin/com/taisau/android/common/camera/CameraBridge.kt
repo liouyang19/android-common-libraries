@@ -16,8 +16,10 @@ import kotlinx.coroutines.flow.StateFlow
 
 class CameraBridge(
 	private val context: Context,
-	private val config: CameraConfig
+	config: CameraConfig
 ) {
+
+	private var config: CameraConfig = config
 	private var currentCamera: ICamera? = null
 	private var currentMode: CameraMode = CameraMode.AUTO
 	
@@ -108,6 +110,11 @@ class CameraBridge(
 	
 	fun getCamera(): ICamera? = currentCamera
 	fun getCurrentMode(): CameraMode = currentMode
+
+	suspend fun updateConfig(config: CameraConfig) {
+		this.config = config
+		currentCamera?.updateConfig(config)
+	}
 	
 	suspend fun release() {
 		currentCamera?.release()

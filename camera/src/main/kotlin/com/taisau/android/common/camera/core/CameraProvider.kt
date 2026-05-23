@@ -2,36 +2,53 @@ package com.taisau.android.common.camera.core
 
 import android.content.Context
 import androidx.lifecycle.LifecycleOwner
+import com.taisau.android.common.camera.CameraProviderImpl
 import kotlinx.coroutines.flow.StateFlow
 
-interface CameraProvider {
-	/** 初始化 */
-	suspend fun initialize(context: Context)
-	
-	/** 绑定到生命周期 */
-	suspend fun bindToLifecycle(
+abstract class CameraProvider(protected open val config: CameraConfig) {
+
+	companion object {
+		@Volatile
+		private var instance: CameraProvider? = null
+
+		/**
+		 * 获取 CameraProvider 单例。
+		 * 首次调用时使用传入的 config 创建实例，后续调用忽略 config 参数，返回已有实例。
+		 */
+		@JvmStatic
+		fun getInstance(config: CameraConfig): CameraProvider {
+			return instance ?: synchronized(this) {
+				instance ?: CameraProviderImpl(config).also { instance = it }
+			}
+		}
+
+		internal fun clearInstance() {
+			synchronized(this) {
+				instance = null
+			}
+		}
+	}
+
+	abstract suspend fun initialize(context: Context)
+
+	abstract suspend fun bindToLifecycle(
 		lifecycle: LifecycleOwner,
 		vararg useCases: UseCase
 	)
-	
-	/** 切换摄像头 */
-	suspend fun switchCamera(cameraSelector: CameraSelector)
-	
-	/** 切换相机模式 */
-	suspend fun switchCameraMode(mode: CameraMode)
-	
-	/** 获取当前相机模式 */
-	fun getCurrentCameraMode(): StateFlow<CameraMode>
-	
-	/** 获取可用模式 */
-	fun getAvailableModes(): StateFlow<List<CameraMode>>
-	
-	/** 获取相机状态 */
-	fun getCameraState(): StateFlow<CameraState>
-	
-	/** 是否已绑定 */
-	fun isBound(): Boolean
-	
-	/** 释放所有资源 */
-	suspend fun release()
+
+	abstract suspend fun switchCamera(cameraSelector: CameraSelector)
+
+	abstract suspend fun switchCameraMode(mode: CameraMode)
+
+	abstract fun getCurrentCameraMode(): StateFlow<CameraMode>
+
+	abstract fun getAvailableModes(): StateFlow<List<CameraMode>>
+
+	abstract fun getCameraState(): StateFlow<CameraState>
+
+	abstract fun isBound(): Boolean
+
+	abstract suspend fun updateConfig(config: CameraConfig)
+
+	abstract suspend fun release()
 }

@@ -2,6 +2,8 @@ package com.taisau.android.common.camera.core
 
 import com.taisau.android.common.camera.camera1.Camera1Config
 import com.taisau.android.common.camera.camera2.Camera2Config
+import com.taisau.android.common.camera.uitls.CameraLogger
+import com.taisau.android.common.camera.uitls.DefaultCameraLogger
 
 data class CameraConfig(
 	val cameraMode: CameraMode = CameraMode.AUTO,
@@ -12,6 +14,8 @@ data class CameraConfig(
 	val enableAutoFocus: Boolean = true,
 	val enableFlash: Boolean = false,
 	val rotation: Int = 0,
+	val enableLog: Boolean = true,
+	val cameraLogger: CameraLogger? = null,
 	val camera1Config: Camera1Config? = null,
 	val camera2Config: Camera2Config? = null
 ) {
@@ -24,6 +28,9 @@ data class CameraConfig(
 		private var enableAutoFocus: Boolean = true
 		private var enableFlash: Boolean = false
 		private var rotation: Int = 0
+
+		private var enableLog: Boolean = true
+		private var cameraLogger: CameraLogger? = null
 		private var camera1Config: Camera1Config? = null
 		private var camera2Config: Camera2Config? = null
 		
@@ -48,6 +55,8 @@ data class CameraConfig(
 		fun camera1Config(block: Camera1Config.Builder.() -> Unit) = apply {
 			this.camera1Config = Camera1Config.Builder().apply(block).build()
 		}
+		fun enableLog(enable: Boolean) = apply { this.enableLog = enable }
+		fun cameraLogger(logger: CameraLogger) = apply { this.cameraLogger = logger }
 		fun camera2Config(config: Camera2Config) = apply { this.camera2Config = config }
 		fun camera2Config(block: Camera2Config.Builder.() -> Unit) = apply {
 			this.camera2Config = Camera2Config.Builder().apply(block).build()
@@ -62,6 +71,8 @@ data class CameraConfig(
 			enableAutoFocus = enableAutoFocus,
 			enableFlash = enableFlash,
 			rotation = rotation,
+			enableLog = enableLog,
+			cameraLogger = cameraLogger,
 			camera1Config = camera1Config,
 			camera2Config = camera2Config
 		)

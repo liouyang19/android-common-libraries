@@ -49,7 +49,10 @@ interface ICamera {
 	
 	/** 释放所有资源 */
 	suspend fun release()
-	
-	/** 获取当前相机状态 */
+
+    /** 获取当前相机状态 */
 	fun getCameraState(): CameraState
+
+	/** 动态更新配置参数（不影响已打开的相机和会话） */
+	suspend fun updateConfig(config: CameraConfig)
 }

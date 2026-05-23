@@ -82,6 +82,7 @@ lifecycleScope.launch {
 | `bindToLifecycle(lifecycle, vararg useCases)` | Registers lifecycle observer, opens camera and starts use cases on `ON_START`, stops on `ON_STOP` |
 | `switchCamera(selector)` | Switches between front/back camera while preserving current mode |
 | `switchCameraMode(mode)` | Switches between Camera1/Camera2 backends |
+| `updateConfig(config)` | Dynamically updates camera parameters (focus, flash, white balance, etc.) without reopening the camera |
 | `getCurrentCameraMode(): StateFlow<CameraMode>` | Emits the currently active camera mode |
 | `getAvailableModes(): StateFlow<List<CameraMode>>` | Emits the list of modes supported on this device |
 | `getCameraState(): StateFlow<CameraState>` | Current camera state (Closed / Opening / Opened / Previewing / Error) |
@@ -202,6 +203,49 @@ When `CameraMode.AUTO` is selected, `CameraBridge` detects available backends at
 - **Camera2** is available if `CameraManager.getCameraIdList()` returns a non-empty list
 
 If both are available, Camera2 is preferred. You can override this by explicitly passing `CameraMode.CAMERA1`.
+
+## Dynamic Configuration
+
+`CameraProvider.updateConfig()` allows modifying camera parameters at runtime without closing or reopening the camera.
+
+### Supported parameters
+
+| Parameter | Camera1 | Camera2 | Effect |
+|-----------|---------|---------|--------|
+| `enableAutoFocus` | ✅ | ✅ | Toggle auto-focus on/off |
+| `enableFlash` | ✅ | ✅ | Toggle flash mode |
+| `fps` | ✅ | ✅ | Change target frame rate |
+| `rotation` | ✅ | ✅ | Change display rotation |
+| `camera1Config.whiteBalance` | ✅ | — | Change white balance |
+| `camera1Config.sceneMode` | ✅ | — | Change scene mode |
+| `camera1Config.focusMode` | ✅ | — | Change focus mode |
+| `camera1Config.jpegQuality` | ✅ | — | Change JPEG quality |
+| `camera2Config.controlAfMode` | — | ✅ | Override AF mode |
+| `camera2Config.controlAeMode` | — | ✅ | Override AE/flash mode |
+| `camera2Config.noiseReductionMode` | — | ✅ | Change noise reduction |
+| `camera2Config.edgeMode` | — | ✅ | Change edge enhancement |
+| `camera2Config.jpegQuality` | — | ✅ | Change JPEG quality |
+
+> **Note:** `previewResolution`, `captureResolution`, and `analysisResolution` changes require reopening the camera. They take effect on the next `bindToLifecycle` cycle or `switchCamera` call.
+
+### Usage
+
+```kotlin
+// Create updated config based on current settings
+val newConfig = CameraConfig.Builder()
+    .autoFocus(true)
+    .flash(true)
+    .camera1Config {
+        whiteBalance(Camera1Config.WhiteBalance.DAYLIGHT)
+        sceneMode(Camera1Config.SceneMode.PORTRAIT)
+    }
+    .build()
+
+// Apply without interrupting preview
+lifecycleScope.launch {
+    provider.updateConfig(newConfig)
+}
+```
 
 ## State Machine
 
