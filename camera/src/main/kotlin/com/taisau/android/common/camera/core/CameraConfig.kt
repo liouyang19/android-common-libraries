@@ -7,6 +7,7 @@ import com.taisau.android.common.camera.uitls.DefaultCameraLogger
 
 data class CameraConfig(
 	val cameraMode: CameraMode = CameraMode.AUTO,
+	val cameraFacing: CameraFacing = CameraFacing.BACK,
 	val previewResolution: Resolution = Resolution.FHD,
 	val captureResolution: Resolution = Resolution.UHD,
 	val analysisResolution: Resolution = Resolution.HD,
@@ -21,6 +22,7 @@ data class CameraConfig(
 ) {
 	class Builder {
 		private var cameraMode: CameraMode = CameraMode.AUTO
+		private var cameraFacing: CameraFacing = CameraFacing.BACK
 		private var previewResolution: Resolution = Resolution.FHD
 		private var captureResolution: Resolution = Resolution.UHD
 		private var analysisResolution: Resolution = Resolution.HD
@@ -35,6 +37,8 @@ data class CameraConfig(
 		private var camera2Config: Camera2Config? = null
 		
 		fun cameraMode(mode: CameraMode) = apply { this.cameraMode = mode }
+
+		fun cameraFacing(facing: CameraFacing) = apply { this.cameraFacing = facing }
 		fun previewResolution(resolution: Resolution) = apply { this.previewResolution = resolution }
 		fun previewResolution(width: Int, height: Int) = apply {
 			this.previewResolution = Resolution(width, height)

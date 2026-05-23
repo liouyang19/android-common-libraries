@@ -33,6 +33,7 @@ abstract class CameraProvider(protected open val config: CameraConfig) {
 
 	abstract suspend fun bindToLifecycle(
 		lifecycle: LifecycleOwner,
+		cameraSelector: CameraSelector,
 		vararg useCases: UseCase
 	)
 
