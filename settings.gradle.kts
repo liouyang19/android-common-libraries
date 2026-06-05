@@ -60,4 +60,5 @@ include(":serialport")
 include(":rabbitmq")
 include(":utils-android")
 include(":utils-jvm")
+include(":retrofit")
 
