@@ -4,7 +4,7 @@ package com.taisau.android.common.camera.camera1
 import android.content.Context
 import android.hardware.Camera
 import android.view.Surface
-import com.taisau.android.common.camera.uitls.CameraLog
+import com.taisau.android.common.camera.utils.CameraLog
 import com.taisau.android.common.camera.core.CameraConfig
 import com.taisau.android.common.camera.core.CameraFacing
 import com.taisau.android.common.camera.core.CameraInfo
@@ -48,7 +48,7 @@ class Camera1Impl(
 		CameraLog.d("Initializing Camera1")
 	}
 	
-	override suspend fun open(cameraId: String): Boolean = withContext(Dispatchers.Main) {
+	override suspend fun open(cameraId: String): Boolean = withContext(Dispatchers.IO) {
 		try {
 			val currentState = _cameraState.value
 			if (currentState !is CameraState.Closed && currentState !is CameraState.Error) {

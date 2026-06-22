@@ -34,9 +34,9 @@ class ImageAnalysisUseCase private constructor(
 		BATCH
 	}
 	
-	interface ImageAnalyzer {
-		suspend fun analyze(frame: AnalysisResult.Frame): Any?
-	}
+    interface ImageAnalyzer {
+        suspend fun analyze(frame: AnalysisResult.Frame)
+    }
 	
 	sealed class AnalysisResult {
 		data class Frame(

@@ -6,13 +6,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import com.taisau.android.common.camera.core.CameraConfig
 import com.taisau.android.common.camera.core.CameraMode
-import com.taisau.android.common.camera.core.CameraProvider
 import com.taisau.android.common.camera.core.CameraSelector
 import com.taisau.android.common.camera.core.CameraState
 import com.taisau.android.common.camera.core.UseCase
-import com.taisau.android.common.camera.uitls.CameraLog
-import com.taisau.android.common.camera.uitls.DefaultCameraLogger
-import com.taisau.android.common.camera.uitls.NoLogger
+import com.taisau.android.common.camera.utils.CameraLog
+import com.taisau.android.common.camera.utils.DefaultCameraLogger
+import com.taisau.android.common.camera.utils.NoLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,7 +19,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import java.util.concurrent.CopyOnWriteArrayList
 
 internal class CameraProviderImpl(
     override val config: CameraConfig
@@ -67,8 +65,14 @@ internal class CameraProviderImpl(
 		cameraSelector: CameraSelector,
 		vararg useCases: UseCase
 	) {
+		// 切换到新的 LifecycleOwner：先移除旧监听器，再关相机
 		if (lifecycleOwner != null && lifecycleOwner != lifecycle) {
-			unbind()
+			lifecycleObserver?.let { observer ->
+				lifecycleOwner?.lifecycle?.removeObserver(observer)
+			}
+			lifecycleObserver = null
+			cameraBridge?.closeAllCameras()
+			cameraBindings.clear()
 		}
 
 		lifecycleOwner = lifecycle

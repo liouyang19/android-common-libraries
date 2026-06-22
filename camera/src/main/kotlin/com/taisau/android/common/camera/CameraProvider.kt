@@ -1,8 +1,12 @@
-package com.taisau.android.common.camera.core
+package com.taisau.android.common.camera
 
 import android.content.Context
 import androidx.lifecycle.LifecycleOwner
-import com.taisau.android.common.camera.CameraProviderImpl
+import com.taisau.android.common.camera.core.CameraConfig
+import com.taisau.android.common.camera.core.CameraMode
+import com.taisau.android.common.camera.core.CameraSelector
+import com.taisau.android.common.camera.core.CameraState
+import com.taisau.android.common.camera.core.UseCase
 import kotlinx.coroutines.flow.StateFlow
 
 abstract class CameraProvider(protected open val config: CameraConfig) {

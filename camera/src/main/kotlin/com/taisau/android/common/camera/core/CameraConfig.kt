@@ -2,8 +2,7 @@ package com.taisau.android.common.camera.core
 
 import com.taisau.android.common.camera.camera1.Camera1Config
 import com.taisau.android.common.camera.camera2.Camera2Config
-import com.taisau.android.common.camera.uitls.CameraLogger
-import com.taisau.android.common.camera.uitls.DefaultCameraLogger
+import com.taisau.android.common.camera.utils.CameraLogger
 
 data class CameraConfig(
 	val cameraMode: CameraMode = CameraMode.AUTO,

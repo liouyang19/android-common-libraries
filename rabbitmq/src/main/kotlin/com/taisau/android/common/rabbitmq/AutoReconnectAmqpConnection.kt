@@ -17,19 +17,29 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.milliseconds
 
+/**
+ * 支持自动重连的 RabbitMQ 连接封装
+ *
+ * 在后台协程中维护连接状态，当连接断开时自动按指数退避策略重连。
+ * 重连后自动恢复所有活跃的消费者。
+ *
+ * @param config RabbitMQ 连接配置
+ */
 class AutoReconnectAmqpConnection(
     private val config: RbAmqpConfig
-) : RbAmqpConnection{
+) : RbAmqpConnection {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var connection: RawAmqpConnection? = null
-    private var mutex = Mutex()
+    private val mutex = Mutex()
     private val _isConnected = MutableStateFlow(false)
 
+    /** 活跃消费者信息，用于重连后自动恢复 */
     private data class ConsumerInfo(
         val queue: String,
         val autoAck: Boolean,
@@ -39,6 +49,11 @@ class AutoReconnectAmqpConnection(
 
     override val isConnected: Boolean get() = _isConnected.value
 
+    /**
+     * 发布消息到交换机
+     *
+     * @return 发布确认结果流（仅启用了发布者确认时才有数据）
+     */
     override fun publish(
         exchange: String,
         routingKey: String,
@@ -46,26 +61,36 @@ class AutoReconnectAmqpConnection(
         properties: AMQP.BasicProperties?
     ): Flow<PubAck> = flow {
         val conn = awaitConnection()
-        val ack = conn.publish(exchange, routingKey, body, properties)
-        if (ack != null) emit(ack)
+        emitAll(conn.publish(exchange, routingKey, body, properties))
     }.flowOn(Dispatchers.IO)
 
+    /**
+     * 消费队列消息
+     *
+     * 自动注册消费者，断线重连后自动恢复消费。
+     * 返回的 Flow 会在取消时自动注销消费者。
+     *
+     * @param queue 队列名称
+     * @param autoAck 是否自动确认
+     * @return 消息流
+     */
     override fun consume(
         queue: String,
         autoAck: Boolean
-    ): Flow<RbAmqpMessage> = flow {
+    ): Flow<RbAmqpMessage> {
         val consumerTag = "consumer-${UUID.randomUUID()}"
-        activeConsumers[consumerTag] = ConsumerInfo(queue, autoAck, consumerTag)
+        return flow {
+            activeConsumers[consumerTag] = ConsumerInfo(queue, autoAck, consumerTag)
 
-        //如果当前已连接，立即开始消费
-        connection?.startConsumer(queue, autoAck, consumerTag)
+            // 等待连接建立并启动消费者
+            val conn = awaitConnection()
+            conn.startConsumer(queue, autoAck, consumerTag)
 
-        //转发消息
-        emitAll(connection!!.massageFlow.filter { msg ->
-            msg.envelope.deliveryTag > 0
-        })
-    }.flowOn(Dispatchers.IO).onCompletion {
-        activeConsumers.remove(consumerTag)
+            // 转发消息，连接断开后 Flow 结束
+            emitAll(conn.messageFlow)
+        }.flowOn(Dispatchers.IO).onCompletion {
+            activeConsumers.remove(consumerTag)
+        }
     }
 
     override suspend fun ack(deliveryTag: Long, multiple: Boolean) {
@@ -85,46 +110,63 @@ class AutoReconnectAmqpConnection(
         connection?.disconnect()
     }
 
-
+    /**
+     * 等待连接就绪，返回当前有效的原始连接
+     */
     private suspend fun awaitConnection(): RawAmqpConnection {
         if (_isConnected.value) return connection!!
-        _isConnected.first{ it }
+        _isConnected.first { it }
         return connection!!
     }
 
-    fun start(){
+    /**
+     * 启动自动重连循环
+     *
+     * 在后台协程中持续尝试建立连接，连接断开后自动重试。
+     */
+    fun start() {
         scope.launch {
             var attempt = 0
-            while (isActive && attempt < config.maxReconnectAttempts){
+            while (isActive && attempt < config.maxReconnectAttempts) {
                 try {
                     val raw = RawAmqpConnection(config)
                     raw.connect()
 
-                    // 恢复消费者
+                    // 恢复所有活跃消费者
+                    mutex.withLock {
+                        connection = raw
+                        _isConnected.value = true
+                    }
+                    attempt = 0
+
+                    // 在新连接上启动消费者
                     activeConsumers.values.forEach { info ->
                         raw.startConsumer(info.queue, info.autoAck, info.consumerTag)
                     }
-                    connection = raw
-                    _isConnected.value = true
-                    attempt  = 0
 
-                    //
+                    // 等待连接关闭
                     raw.connectionShutdown.collect {
-                        _isConnected.value = false
-                        connection = null
-
+                        mutex.withLock {
+                            _isConnected.value = false
+                            connection = null
+                        }
                     }
-                } catch (e: Exception) {
-                    _isConnected.value = false
+                } catch (_: Exception) {
+                    mutex.withLock {
+                        _isConnected.value = false
+                    }
                 }
                 attempt++
                 delay(config.reconnectDelayMills.milliseconds)
             }
-           _isConnected.value = false
+            _isConnected.value = false
         }
     }
 
-    fun stop(){
+    /**
+     * 停止自动重连
+     */
+    fun stop() {
         scope.cancel()
     }
 }

@@ -1,4 +1,4 @@
-package com.taisau.android.common.camera.uitls
+package com.taisau.android.common.camera.utils
 
 import android.util.Log
 enum class LogLevel { VERBOSE, DEBUG, INFO, WARN, ERROR }

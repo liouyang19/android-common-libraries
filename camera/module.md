@@ -23,8 +23,10 @@ camera/src/main/kotlin/com/taisau/android/common/camera/
 │   ├── Camera1Config.kt      # Camera1-specific: white balance, scene mode, focus, jpeg quality
 │   └── Camera1Impl.kt        # ICamera implementation using android.hardware.Camera
 ├── camera2/
-│   ├── Camera2Config.kt      # Camera2-specific: hardware level, template, AF/AE modes
+│   ├── Camera2Config.kt      # Camera2-specific: hardware level, template, AF/AE modes, jpeg quality
 │   └── Camera2Impl.kt        # ICamera implementation using android.hardware.camera2
+├── utils/
+│   └── CameraLogger.kt       # Logging interface (NoLogger / DefaultCameraLogger / CameraLog)
 └── usecase/
     ├── PreviewUseCase.kt     # Preview on SurfaceView / TextureView / Surface
     ├── ImageCaptureUseCase.kt# Still-image capture with flash & capture mode control
@@ -371,3 +373,30 @@ Closed → Opening → Opened → Previewing (after repeating request started)
 ```
 
 `CameraProviderImpl` observes lifecycle events: camera and use cases start on `ON_START` and stop on `ON_STOP`.
+
+---
+
+## 修复历史 / Changelog
+
+### v0.2.0 (Latest)
+
+| 分类 | 问题 | 文件 | 修复内容 |
+|------|------|------|---------|
+| **P0 Bug** | Camera1 拍照必崩 | `ImageCaptureUseCase.kt` | `captureSurface` 对 Camera1 始终为 null → 改为创建占位 Surface |
+| **P0 Bug** | Camera1 `open()` 阻塞主线程 | `Camera1Impl.kt` | `Dispatchers.Main` → `Dispatchers.IO` |
+| **P0 Bug** | ImageReader handler 为 null | `ImageCaptureUseCase.kt` | 所有 `ImageReader` 使用 `backgroundHandler`（HandlerThread） |
+| **P0 Bug** | 无用 ImageReader 浪费性能 | `ImageCaptureUseCase.kt` | 移除 `onCameraOpened()` 中仅用于维持 `captureSurface` 的冗余监听器 |
+| **P1** | 每次拍照新建 ImageReader | `ImageCaptureUseCase.kt` | 复用类级 `camera2CaptureReader`，减少创建/销毁开销 |
+| **P1** | 匿名 CoroutineScope 泄漏 | `ImageCaptureUseCase.kt` | 所有协程使用 `scope` 成员变量统一管理 |
+| **P1** | Camera2 缺少 FPS/Rotation 配置 | `Camera2Impl.kt` | `applyCaptureRequestConfig()` 添加 `CONTROL_AE_TARGET_FPS_RANGE` 和 `JPEG_ORIENTATION` |
+| **P1** | ImageReader 内存泄漏 | `Camera2Impl.kt` | `capture()` 中先 `close()` 旧 ImageReader 再创建新实例 |
+| **P1** | `openCamera()` 返回失效相机 | `CameraBridge.kt` | 检测已有实例的 `isOpen()` 状态，失效则释放重建 |
+| **P1** | 生命周期重新绑定处理不当 | `CameraProviderImpl.kt` | 先同步移除旧 observer、关相机、清 binding，再建立新绑定 |
+| **P2** | `Camera2Config.jpegQuality` 类型过窄 | `Camera2Config.kt` | `Byte` → `Int` |
+| **P2** | `@OptIn(InternalCoroutinesApi)` | `ImageCaptureUseCase.kt` | 移除内部 API 依赖 |
+| **P2** | `android.hardware.camera2.*` 星号导入 | `Camera2Impl.kt` | 改为显式导入 |
+| **P2** | 目录名拼写错误 `uitls` | 目录 | `uitls` → `utils`，更新所有 import |
+| **P2** | `getSupportedResolutions()` 缺少 JPEG 尺寸 | `Camera2Impl.kt` | 同时查询 `SurfaceTexture` 和 `ImageFormat.JPEG` 输出尺寸 |
+| **P2** | `ImageAnalyzer.analyze()` 返回值无用 | `ImageAnalysisUseCase.kt` | 返回类型 `Any?` → `Unit` |
+| **P3** | Camera2 FPS 配置缺失 | `Camera2Impl.kt` | `applyCaptureRequestConfig()` 添加 FPS Range 设置 |
+| **P3** | Camera2 旋转配置缺失 | `Camera2Impl.kt` | `applyCaptureRequestConfig()` 添加 `JPEG_ORIENTATION` 设置 |

@@ -7,7 +7,32 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
-// RabbitMQClient.kt
+/**
+ * RabbitMQ 客户端（经典 API，Builder 模式）
+ *
+ * 管理 AMQP 连接和多个信道，支持连接配置和信道复用。
+ * 使用 [Builder] 模式创建，连接在 build 时自动建立。
+ *
+ * 使用示例：
+ * ```
+ * val client = RabbitMQClient.create {
+ *     host("192.168.1.100")
+ *     credentials("admin", "password")
+ * }
+ * // 发布消息
+ * RabbitMQPublisher(client)
+ *     .toQueue("my_queue")
+ *     .publish("Hello")
+ * // 消费消息
+ * RabbitMQRoute(client)
+ *     .queue("my_queue")
+ *     .onMessage { msg -> println(msg.bodyAsString()) }
+ *     .consume()
+ * ```
+ *
+ * @see RabbitMQPublisher
+ * @see RabbitMQRoute
+ */
 class RabbitMQClient private constructor(
     private val config: RabbitMQConfig
 ) {
@@ -27,6 +52,11 @@ class RabbitMQClient private constructor(
     private var connection: Connection? = null
     private val channels = ConcurrentHashMap<String, Channel>()
 
+    /**
+     * 建立与 RabbitMQ 服务器的连接
+     *
+     * @return 连接结果
+     */
     suspend fun connect(): Result<Connection> = withContext(Dispatchers.IO) {
         try {
             connection = connectionFactory.newConnection()
@@ -36,11 +66,17 @@ class RabbitMQClient private constructor(
         }
     }
 
+    /**
+     * 获取或创建指定名称的信道
+     *
+     * @param name 信道名称，用于复用信道
+     * @return 信道结果
+     */
     fun getOrCreateChannel(name: String): Result<Channel> {
         return try {
             val channel = channels.getOrPut(name) {
                 connection?.createChannel()
-                    ?: throw IllegalStateException("Connection not established")
+                    ?: throw IllegalStateException("连接未建立")
             }
             Result.success(channel)
         } catch (e: Exception) {
@@ -48,12 +84,29 @@ class RabbitMQClient private constructor(
         }
     }
 
+    /**
+     * 关闭连接并释放所有资源
+     */
     fun close() {
         channels.values.forEach { it.close() }
         channels.clear()
         connection?.close()
     }
 
+    /**
+     * RabbitMQClient 构建器
+     *
+     * 使用 DSL 方式配置并构建客户端。
+     *
+     * 示例：
+     * ```
+     * val client = RabbitMQClient.create {
+     *     host("localhost")
+     *     port(5672)
+     *     credentials("guest", "guest")
+     * }
+     * ```
+     */
     class Builder {
         private var config = RabbitMQConfig()
 
@@ -70,14 +123,25 @@ class RabbitMQClient private constructor(
             config = config.copy(automaticRecovery = enabled, networkRecoveryInterval = interval)
         }
 
+        /**
+         * 构建并自动连接
+         *
+         * @return 已连接的 [RabbitMQClient] 实例
+         */
         suspend fun build(): RabbitMQClient {
             val client = RabbitMQClient(config)
-            client.connect().getOrThrow()
+            val _ = client.connect().getOrThrow() // 连接失败则抛出异常
             return client
         }
     }
 
     companion object {
+        /**
+         * 使用 DSL 创建 [RabbitMQClient] 构建器
+         *
+         * @param block 配置 DSL
+         * @return [Builder] 实例
+         */
         fun create(block: Builder.() -> Unit): Builder {
             return Builder().apply(block)
         }

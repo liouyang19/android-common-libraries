@@ -12,7 +12,7 @@ import com.taisau.android.common.camera.core.CameraConfig
 import com.taisau.android.common.camera.core.CameraMode
 import com.taisau.android.common.camera.core.CameraSelector
 import com.taisau.android.common.camera.core.ICamera
-import com.taisau.android.common.camera.uitls.CameraLog
+import com.taisau.android.common.camera.utils.CameraLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -69,7 +69,16 @@ class CameraBridge(
 	}
 
 	suspend fun openCamera(cameraId: String): ICamera? {
-		if (cameras.containsKey(cameraId)) return cameras[cameraId]
+		// 如果已有该相机的有效实例，直接返回
+		val existing = cameras[cameraId]
+		if (existing?.isOpen() == true) return existing
+
+		// 如果有失效实例，先移除并释放
+		if (existing != null) {
+			existing.close()
+			cameras.remove(cameraId)
+		}
+
 		val camera = createCamera()
 		camera.initialize(context)
 		return if (camera.open(cameraId)) {

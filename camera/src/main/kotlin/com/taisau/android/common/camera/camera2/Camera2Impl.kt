@@ -1,27 +1,41 @@
 package com.taisau.android.common.camera.camera2
 
 import android.annotation.SuppressLint
-import com.taisau.android.common.camera.core.CameraInfo
-import com.taisau.android.common.camera.core.CameraState
-import com.taisau.android.common.camera.core.Resolution
 import android.content.Context
 import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
-import android.hardware.camera2.*
+import android.hardware.camera2.CameraAccessException
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraDevice
+import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CaptureFailure
+import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.TotalCaptureResult
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.media.ImageReader
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.util.Range
 import android.view.Surface
 import com.taisau.android.common.camera.core.CameraConfig
 import com.taisau.android.common.camera.core.CameraFacing
+import com.taisau.android.common.camera.core.CameraInfo
 import com.taisau.android.common.camera.core.CameraMode
+import com.taisau.android.common.camera.core.CameraState
 import com.taisau.android.common.camera.core.ICamera
-import com.taisau.android.common.camera.uitls.CameraLog
-import kotlinx.coroutines.*
+import com.taisau.android.common.camera.core.Resolution
+import com.taisau.android.common.camera.utils.CameraLog
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -281,19 +295,21 @@ class Camera2Impl(
 		ensureCameraOpened()
 		val session = captureSession ?: throw IllegalStateException("Capture session not created")
 		val device = cameraDevice ?: return@withContext
-		
+
 		try {
 			CameraLog.d("Capturing photo")
-			
+
 			val captureWidth = config.captureResolution.width
 			val captureHeight = config.captureResolution.height
-			
+
+			// 关闭旧的 ImageReader 防止泄漏
+			imageReader?.close()
 			imageReader = ImageReader.newInstance(
 				captureWidth, captureHeight,
 				ImageFormat.JPEG, 2
 			).also { reader ->
-				reader.setOnImageAvailableListener({ reader ->
-					val image = reader.acquireLatestImage()
+				reader.setOnImageAvailableListener({ r ->
+					val image = r.acquireLatestImage()
 					image?.use { img ->
 						val buffer = img.planes[0].buffer
 						val bytes = ByteArray(buffer.remaining())
@@ -349,11 +365,20 @@ class Camera2Impl(
 		val characteristics = cameraCharacteristics ?: return emptyList()
 		val configMap = characteristics.get(
 			CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
-		)
-		
-		return configMap?.getOutputSizes(SurfaceTexture::class.java)?.map {
-			Resolution(it.width, it.height)
-		} ?: emptyList()
+		) ?: return emptyList()
+
+		val resolutions = mutableSetOf<Resolution>()
+
+		// 预览输出尺寸（SurfaceTexture）
+		configMap.getOutputSizes(SurfaceTexture::class.java)?.forEach {
+			resolutions.add(Resolution(it.width, it.height))
+		}
+		// 拍照输出尺寸（JPEG）
+		configMap.getOutputSizes(ImageFormat.JPEG)?.forEach {
+			resolutions.add(Resolution(it.width, it.height))
+		}
+
+		return resolutions.toList().sortedByDescending { it.width * it.height }
 	}
 	
 	override fun getCameraCharacteristics(): Map<String, Any> {
@@ -474,20 +499,32 @@ class Camera2Impl(
 	 * 将公共配置和Camera2特定配置应用到CaptureRequest.Builder
 	 */
 	private fun applyCaptureRequestConfig(builder: CaptureRequest.Builder, config: CameraConfig) {
+		// 设置自动对焦
 		if (config.enableAutoFocus) {
 			builder.set(
 				CaptureRequest.CONTROL_AF_MODE,
 				CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
 			)
 		}
-		
+
+		// 设置闪光灯
 		if (config.enableFlash) {
 			builder.set(
 				CaptureRequest.CONTROL_AE_MODE,
 				CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH
 			)
 		}
-		
+
+		// 设置目标帧率（FPS）
+		builder.set(
+			CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+			Range(config.fps, config.fps)
+		)
+
+		// 设置预览旋转角度
+		builder.set(CaptureRequest.JPEG_ORIENTATION, config.rotation)
+
+		// 应用 Camera2 特定配置
 		config.camera2Config?.let { camera2Config ->
 			camera2Config.controlAfMode?.let {
 				builder.set(CaptureRequest.CONTROL_AF_MODE, it)
@@ -501,7 +538,7 @@ class Camera2Impl(
 			camera2Config.edgeMode?.let {
 				builder.set(CaptureRequest.EDGE_MODE, it)
 			}
-			builder.set(CaptureRequest.JPEG_QUALITY, camera2Config.jpegQuality)
+			builder.set(CaptureRequest.JPEG_QUALITY, camera2Config.jpegQuality.toByte())
 		}
 	}
 	

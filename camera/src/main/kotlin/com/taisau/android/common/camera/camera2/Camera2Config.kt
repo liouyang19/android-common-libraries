@@ -23,7 +23,7 @@ data class Camera2Config(
 	val noiseReductionMode: Int? = null,
 	val edgeMode: Int? = null,
 	val useReprocessing: Boolean = false,
-	val jpegQuality: Byte = 95
+	val jpegQuality: Int = 95
 ) {
 	/**
 	 * 相机硬件级别枚举
@@ -60,7 +60,7 @@ data class Camera2Config(
 		private var noiseReductionMode: Int? = null
 		private var edgeMode: Int? = null
 		private var useReprocessing: Boolean = false
-		private var jpegQuality: Byte = 95
+		private var jpegQuality: Int = 95
 		
 		/**
 		 * 设置相机硬件级别
@@ -146,7 +146,7 @@ data class Camera2Config(
 		 * @return Builder实例，支持链式调用
 		 * @throws IllegalArgumentException 当quality不在0-100范围内时抛出异常
 		 */
-		fun jpegQuality(quality: Byte) = apply {
+		fun jpegQuality(quality: Int) = apply {
 			require(quality in 0..100) { "JPEG quality must be 0-100" }
 			this.jpegQuality = quality
 		}

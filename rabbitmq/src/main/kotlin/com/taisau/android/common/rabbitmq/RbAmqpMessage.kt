@@ -3,7 +3,15 @@ package com.taisau.android.common.rabbitmq
 import com.rabbitmq.client.AMQP
 import com.rabbitmq.client.Envelope
 
-
+/**
+ * RabbitMQ 消息封装（响应式 API）
+ *
+ * 包含消息体、投递信息和属性。
+ *
+ * @property body 消息体（字节数组）
+ * @property envelope 投递信息（交换机、路由键、deliveryTag 等）
+ * @property properties 消息属性（contentType、headers 等）
+ */
 data class RbAmqpMessage(
     val body: ByteArray,
     val envelope: Envelope,
