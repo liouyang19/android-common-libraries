@@ -17,10 +17,10 @@ interface ICamera {
 	/** 关闭相机 */
 	suspend fun close()
 	
-	/** 创建CaptureSession */
+	/** 创建CaptureSession，会话类型通过 [CameraSession] 密封类区分 */
 	suspend fun createCaptureSession(
 		surfaces: List<Surface>,
-		onSessionConfigured: suspend (session: Any) -> Unit
+		onSessionConfigured: suspend (session: CameraSession) -> Unit
 	)
 	
 	/** 关闭CaptureSession */

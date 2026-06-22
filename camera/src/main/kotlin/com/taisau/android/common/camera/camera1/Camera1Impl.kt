@@ -4,14 +4,15 @@ package com.taisau.android.common.camera.camera1
 import android.content.Context
 import android.hardware.Camera
 import android.view.Surface
-import com.taisau.android.common.camera.utils.CameraLog
 import com.taisau.android.common.camera.core.CameraConfig
 import com.taisau.android.common.camera.core.CameraFacing
 import com.taisau.android.common.camera.core.CameraInfo
 import com.taisau.android.common.camera.core.CameraMode
+import com.taisau.android.common.camera.core.CameraSession
 import com.taisau.android.common.camera.core.CameraState
 import com.taisau.android.common.camera.core.ICamera
 import com.taisau.android.common.camera.core.Resolution
+import com.taisau.android.common.camera.utils.CameraLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,7 +20,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.IOException
 
 
 class Camera1Impl(
@@ -63,9 +63,8 @@ class Camera1Impl(
 			val numberOfCameras = Camera.getNumberOfCameras()
 			
 			if (id >= numberOfCameras) {
-				val error = IOException("Camera ID $id not found. Available: $numberOfCameras")
-                error.message?.let { CameraLog.e(it) }
-				throw error
+				CameraLog.e("Camera ID $id not found. Available: $numberOfCameras")
+				throw IllegalStateException("Camera ID $id not found. Available: $numberOfCameras")
 			}
 			
 			CameraLog.d("Opening camera ID: $id")
@@ -93,9 +92,8 @@ class Camera1Impl(
 			true
 		} catch (e: Exception) {
 			_cameraState.value = CameraState.Error(e)
-			val errorMsg = "Failed to open camera: ${e.message}"
-			CameraLog.e(errorMsg, e)
-			throw IOException(errorMsg, e)
+			CameraLog.e("Failed to open camera: ${e.message}", e)
+			throw IllegalStateException("Failed to open camera: ${e.message}", e)
 		}
 	}
 	
@@ -103,7 +101,7 @@ class Camera1Impl(
 	 * 配置相机参数，包括分辨率、帧率、对焦模式等
 	 */
 	private fun configureCameraParameters() {
-        val _ = withCamera { cam ->
+        withCamera { cam ->
             val params = cam.parameters
 
             // 设置预览分辨率
@@ -197,7 +195,7 @@ class Camera1Impl(
 	
 	override suspend fun createCaptureSession(
 		surfaces: List<Surface>,
-		onSessionConfigured: suspend (session: Any) -> Unit
+		onSessionConfigured: suspend (session: CameraSession) -> Unit
 	): Unit = withContext(Dispatchers.Main) {
 		withCamera { cam ->
 			try {
@@ -208,16 +206,13 @@ class Camera1Impl(
 				// 设置预览Surface
 				if (surfaces.isNotEmpty()) {
 					previewSurface = surfaces[0]
-					// 实际使用时需要根据Surface类型设置预览显示
-					// 这里通过Camera1的setPreviewDisplay或setPreviewTexture
 				}
 				
-				onSessionConfigured(cam)
+				onSessionConfigured(CameraSession.Camera1Session(cam))
 				CameraLog.d("Capture session created")
 			} catch (e: Exception) {
-				val errorMsg = "Failed to create capture session"
-				CameraLog.e(errorMsg, e)
-				throw IOException(errorMsg, e)
+				CameraLog.e("Failed to create capture session", e)
+				throw IllegalStateException("Failed to create capture session", e)
 			}
 		}
 	}
@@ -248,9 +243,8 @@ class Camera1Impl(
 				_cameraState.value = CameraState.Previewing
 				CameraLog.d("Preview started")
 			} catch (e: Exception) {
-				val errorMsg = "Failed to start preview"
-				CameraLog.e(errorMsg, e)
-				throw IOException(errorMsg, e)
+				CameraLog.e("Failed to start preview", e)
+				throw IllegalStateException("Failed to start preview", e)
 			}
 		}
 	}
@@ -260,20 +254,16 @@ class Camera1Impl(
 		callback: (ByteArray) -> Unit
 	): Unit = withContext(Dispatchers.Main) {
 		withCamera { cam ->
-			try {
-				CameraLog.d("Capturing photo")
-				cam.takePicture(
-					{ /* shutter */ },
-					{ _, _ -> /* raw */},
-					{ data, _ ->
-						scope.launch(Dispatchers.IO) {
-							callback(data)
-						}
+			CameraLog.d("Capturing photo")
+			cam.takePicture(
+				{ /* shutter */ },
+				{ _, _ -> /* raw */},
+				{ data, _ ->
+					scope.launch(Dispatchers.IO) {
+						callback(data)
 					}
-				)
-			} catch (e: Exception) {
-				CameraLog.e("Failed to capture photo", e)
-			}
+				}
+			)
 		}
 	}
 	

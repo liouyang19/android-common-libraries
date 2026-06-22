@@ -12,24 +12,13 @@ import kotlinx.coroutines.flow.StateFlow
 abstract class CameraProvider(protected open val config: CameraConfig) {
 
 	companion object {
-		@Volatile
-		private var instance: CameraProvider? = null
-
 		/**
-		 * 获取 CameraProvider 单例。
-		 * 首次调用时使用传入的 config 创建实例，后续调用忽略 config 参数，返回已有实例。
+		 * 创建 CameraProvider 实例。
+		 * 每次调用返回独立实例，不再使用全局单例。
 		 */
 		@JvmStatic
-		fun getInstance(config: CameraConfig): CameraProvider {
-			return instance ?: synchronized(this) {
-				instance ?: CameraProviderImpl(config).also { instance = it }
-			}
-		}
-
-		internal fun clearInstance() {
-			synchronized(this) {
-				instance = null
-			}
+		fun create(config: CameraConfig): CameraProvider {
+			return CameraProviderImpl(config)
 		}
 	}
 

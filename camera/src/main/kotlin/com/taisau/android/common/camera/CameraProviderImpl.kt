@@ -7,7 +7,9 @@ import androidx.lifecycle.LifecycleOwner
 import com.taisau.android.common.camera.core.CameraConfig
 import com.taisau.android.common.camera.core.CameraMode
 import com.taisau.android.common.camera.core.CameraSelector
+import com.taisau.android.common.camera.core.CameraSession
 import com.taisau.android.common.camera.core.CameraState
+import com.taisau.android.common.camera.core.ICamera
 import com.taisau.android.common.camera.core.UseCase
 import com.taisau.android.common.camera.utils.CameraLog
 import com.taisau.android.common.camera.utils.DefaultCameraLogger
@@ -19,13 +21,14 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 internal class CameraProviderImpl(
     override val config: CameraConfig
 ) : CameraProvider(config) {
 
 	private var cameraBridge: CameraBridge? = null
-	private val cameraBindings = mutableMapOf<CameraSelector, List<UseCase>>()
+	private val cameraBindings = ConcurrentHashMap<CameraSelector, List<UseCase>>()
 	private var lifecycleOwner: LifecycleOwner? = null
 	private var lifecycleObserver: LifecycleEventObserver? = null
 	private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -81,9 +84,11 @@ internal class CameraProviderImpl(
 		if (lifecycleObserver == null) {
 			val observer = LifecycleEventObserver { _, event ->
 				when (event) {
-					Lifecycle.Event.ON_START -> scope.launch { startAllCameras() }
-					Lifecycle.Event.ON_STOP -> scope.launch { stopAllCameras() }
-					Lifecycle.Event.ON_DESTROY -> scope.launch { unbind() }
+					Lifecycle.Event.ON_START -> scope.launch { startBoundCameras() }
+					Lifecycle.Event.ON_STOP -> scope.launch { stopBoundCameras() }
+					Lifecycle.Event.ON_DESTROY -> {
+						scope.launch { release() }
+					}
 					else -> {}
 				}
 			}
@@ -92,74 +97,72 @@ internal class CameraProviderImpl(
 		}
 
 		if (lifecycle.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-			scope.launch { startCamera(cameraSelector, useCases.toList()) }
+			scope.launch {
+				val _ = startSingleCamera(cameraSelector, useCases.toList())
+			}
 		}
 
 		_isBound.value = true
 	}
 
-	private suspend fun startAllCameras() {
+	/**
+	 * 启动所有已绑定的相机
+	 */
+	private suspend fun startBoundCameras() {
+		_cameraState.value = CameraState.Opening
 		var allSucceeded = true
 		for ((selector, cases) in cameraBindings.toMap()) {
-			val cameraId = cameraBridge?.resolveCameraId(selector) ?: run {
-				CameraLog.e("无法解析 cameraSelector: $selector")
+			if (!startSingleCamera(selector, cases)) {
 				allSucceeded = false
-				continue
-			}
-			val camera = cameraBridge?.openCamera(cameraId)
-			if (camera == null) {
-				CameraLog.e("无法打开相机 $cameraId")
-				allSucceeded = false
-				continue
-			}
-			cases.forEach { it.onCameraOpened(camera) }
-			val surfaces = cases.flatMap { it.requiredSurfaces }.distinct()
-			if (surfaces.isNotEmpty()) {
-				camera.createCaptureSession(surfaces) { _ ->
-					camera.setRepeatingRequest(surfaces)
-					cases.forEach { it.start() }
-				}
 			}
 		}
 		_cameraState.value = if (allSucceeded) CameraState.Previewing else CameraState.Opened
 	}
 
-	private suspend fun startCamera(selector: CameraSelector, useCases: List<UseCase>) {
+	/**
+	 * 启动单个相机及其 UseCase
+	 *
+	 * @return true 表示全部成功
+	 */
+	private suspend fun startSingleCamera(selector: CameraSelector, useCases: List<UseCase>): Boolean {
 		val cameraId = cameraBridge?.resolveCameraId(selector) ?: run {
-			CameraLog.e("无法解析 cameraSelector: $selector")
-			_cameraState.value = CameraState.Error(RuntimeException("Cannot resolve camera selector"))
-			return
+			CameraLog.e("Cannot resolve camera selector: $selector")
+			_cameraState.value = CameraState.Error(IllegalStateException("Cannot resolve camera selector"))
+			return false
 		}
 		val camera = cameraBridge?.openCamera(cameraId)
 		if (camera == null) {
-			CameraLog.e("无法打开相机 $cameraId")
-			_cameraState.value = CameraState.Error(RuntimeException("Cannot open camera $cameraId"))
-			return
+			CameraLog.e("Cannot open camera: $cameraId")
+			_cameraState.value = CameraState.Error(IllegalStateException("Cannot open camera $cameraId"))
+			return false
 		}
 		useCases.forEach { it.onCameraOpened(camera) }
 		val surfaces = useCases.flatMap { it.requiredSurfaces }.distinct()
 		if (surfaces.isNotEmpty()) {
-			camera.createCaptureSession(surfaces) { _ ->
+			camera.createCaptureSession(surfaces) { _: CameraSession ->
 				camera.setRepeatingRequest(surfaces)
 				useCases.forEach { it.start() }
-				_cameraState.value = CameraState.Previewing
 			}
 		}
+		return true
 	}
 
-	private suspend fun stopAllCameras() {
+	private suspend fun stopBoundCameras() {
 		cameraBindings.values.flatten().forEach { it.stop() }
 		cameraBridge?.closeAllCameras()
 		_cameraState.value = CameraState.Closed
 	}
 
-	private fun unbind() {
+	/**
+	 * 同步解绑：移除生命周期监听器并关闭相机
+	 */
+	private suspend fun unbind() {
 		lifecycleObserver?.let { observer ->
 			lifecycleOwner?.lifecycle?.removeObserver(observer)
 		}
 		lifecycleObserver = null
 		lifecycleOwner = null
-		scope.launch { cameraBridge?.closeAllCameras() }
+		cameraBridge?.closeAllCameras()
 		cameraBindings.clear()
 		_isBound.value = false
 		_cameraState.value = CameraState.Closed
@@ -168,20 +171,20 @@ internal class CameraProviderImpl(
 	override suspend fun switchCamera(cameraSelector: CameraSelector) {
 		val wasRunning = cameraBindings.values.flatten().any { it.isActive() }
 
-		if (wasRunning) stopAllCameras()
+		if (wasRunning) stopBoundCameras()
 
 		cameraBindings.clear()
 		val switched = cameraBridge?.switchCamera(cameraSelector) ?: false
-		check(switched) { "无法切换相机" }
+		check(switched) { "Cannot switch camera" }
 	}
 
 	override suspend fun switchCameraMode(mode: CameraMode) {
 		val wasRunning = cameraBindings.values.flatten().any { it.isActive() }
 
-		if (wasRunning) stopAllCameras()
+		if (wasRunning) stopBoundCameras()
 
 		val switched = cameraBridge?.switchCameraMode(mode) ?: false
-		check(switched) { "无法切换相机模式" }
+		check(switched) { "Cannot switch camera mode" }
 	}
 
 	override fun getCurrentCameraMode(): StateFlow<CameraMode> = _cameraMode
@@ -194,7 +197,7 @@ internal class CameraProviderImpl(
 	}
 
 	override suspend fun release() {
-		stopAllCameras()
+		stopBoundCameras()
 		unbind()
 		cameraBridge?.release()
 		cameraBridge = null

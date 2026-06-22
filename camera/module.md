@@ -44,7 +44,7 @@ val config = CameraConfig.Builder()
     .build()
 
 // 2. Create provider
-val provider = CameraProviderImpl(context, config)
+val provider = CameraProvider.create(config)
 provider.initialize(context)
 
 // 3. Create use cases
@@ -84,6 +84,7 @@ lifecycleScope.launch {
 
 | Method | Description |
 |--------|-------------|
+| `create(config)` | Factory method to create a new provider (no singleton) |
 | `initialize(context)` | Initializes the camera bridge, detects available modes |
 | `bindToLifecycle(lifecycle, cameraSelector, vararg useCases)` | Binds use cases to a specific camera. Multiple calls accumulate cameras (single or dual). Starts on `ON_START`, stops on `ON_STOP` |
 | `switchCamera(selector)` | Switches between front/back camera while preserving current mode |
@@ -378,7 +379,24 @@ Closed → Opening → Opened → Previewing (after repeating request started)
 
 ## 修复历史 / Changelog
 
-### v0.2.0 (Latest)
+### v0.3.0 (Latest)
+
+| 分类 | 问题 | 文件 | 修复内容 |
+|------|------|------|---------|
+| **P1** | `Builder.cameraFacing()` 被静默忽略 | `CameraConfig.kt` | 从 Builder 和 Data class 中删除该字段 |
+| **P1** | Camera2 FPS 范围未校验设备能力 | `Camera2Impl.kt` | 新增 `resolveFpsRange()` 从支持范围中选择最佳匹配 |
+| **P2** | 全局单例设计缺陷 | `CameraProvider.kt` | 移除 `getInstance()` 单例，改为 `create()` 工厂方法 |
+| **P2** | 非线程安全集合 | `CameraBridge.kt`, `CameraProviderImpl.kt` | `mutableMapOf` → `ConcurrentHashMap` |
+| **P2** | `createCaptureSession` 使用 `Any` 类型 | `ICamera.kt`, `CameraSession.kt` | 新增 `CameraSession` 密封类，替换 `Any` |
+| **P2** | `Camera1Impl.capture()` 吞掉异常 | `Camera1Impl.kt` | 移除空 catch 块，让异常自然传播 |
+| **P2** | 错误类型不一致 | `Camera1Impl.kt`, `Camera2Impl.kt` | `IOException`/`RuntimeException` → `IllegalStateException` |
+| **P2** | `startAllCameras`/`startCamera` 代码重复 | `CameraProviderImpl.kt` | 合并为 `startBoundCameras()` + `startSingleCamera()` |
+| **P3** | `val _ = withCamera` 冗余赋值 | `Camera1Impl.kt` | 移除无用的 `val _ =` |
+| **P3** | `unbind()` 中相机关闭是 fire-and-forget | `CameraProviderImpl.kt` | 改为同步 `suspend` 函数 |
+| **P3** | 缺少 `CameraState.Opening` 发射 | `CameraProviderImpl.kt` | `startBoundCameras()` 开始时发射 `Opening` |
+| **P2** | 日志语言不统一 | `CameraProviderImpl.kt` | 统一为英文 |
+
+### v0.2.0
 
 | 分类 | 问题 | 文件 | 修复内容 |
 |------|------|------|---------|

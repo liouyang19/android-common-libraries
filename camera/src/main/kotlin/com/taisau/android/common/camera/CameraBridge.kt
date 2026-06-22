@@ -19,6 +19,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.util.concurrent.ConcurrentHashMap
 
 class CameraBridge(
 	private val context: Context,
@@ -26,7 +27,7 @@ class CameraBridge(
 ) {
 
 	private var config: CameraConfig = config
-	private val cameras = mutableMapOf<String, ICamera>()
+	private val cameras = ConcurrentHashMap<String, ICamera>()
 	private var currentMode: CameraMode = CameraMode.AUTO
 
 	private val _cameraMode = MutableStateFlow(currentMode)

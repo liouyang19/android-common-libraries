@@ -24,6 +24,7 @@ import com.taisau.android.common.camera.core.CameraConfig
 import com.taisau.android.common.camera.core.CameraFacing
 import com.taisau.android.common.camera.core.CameraInfo
 import com.taisau.android.common.camera.core.CameraMode
+import com.taisau.android.common.camera.core.CameraSession
 import com.taisau.android.common.camera.core.CameraState
 import com.taisau.android.common.camera.core.ICamera
 import com.taisau.android.common.camera.core.Resolution
@@ -177,7 +178,7 @@ class Camera2Impl(
 	
 	override suspend fun createCaptureSession(
 		surfaces: List<Surface>,
-		onSessionConfigured: suspend (session: Any) -> Unit
+		onSessionConfigured: suspend (session: CameraSession) -> Unit
 	) = withContext(Dispatchers.Main) {
 		ensureCameraOpened()
 		val device = cameraDevice ?: return@withContext
@@ -190,7 +191,7 @@ class Camera2Impl(
 						captureSession = session
 						scope.launch {
 							try {
-								onSessionConfigured(session)
+								onSessionConfigured(CameraSession.Camera2Session(session))
 								CameraLog.d("Capture session created")
 								continuation.resume(Unit)
 							} catch (e: Exception) {
@@ -515,11 +516,9 @@ class Camera2Impl(
 			)
 		}
 
-		// 设置目标帧率（FPS）
-		builder.set(
-			CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
-			Range(config.fps, config.fps)
-		)
+		// 设置目标帧率（FPS），自动适配设备支持的范围
+		val fpsRange = resolveFpsRange(config.fps)
+		builder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fpsRange)
 
 		// 设置预览旋转角度
 		builder.set(CaptureRequest.JPEG_ORIENTATION, config.rotation)
@@ -542,6 +541,24 @@ class Camera2Impl(
 		}
 	}
 	
+	/**
+	 * 从设备支持的 FPS 范围中选择最接近目标值的一组
+	 */
+	private fun resolveFpsRange(targetFps: Int): Range<Int> {
+		val availableRanges = cameraCharacteristics
+			?.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+			?: return Range(targetFps, targetFps)
+
+		// 优先选择包含 targetFps 且范围最小的区间
+		val exact = availableRanges.firstOrNull { it.lower == targetFps && it.upper == targetFps }
+		if (exact != null) return exact
+
+		// 否则选择最接近的区间
+		return availableRanges.minByOrNull {
+			kotlin.math.abs(it.lower - targetFps) + kotlin.math.abs(it.upper - targetFps)
+		} ?: Range(targetFps, targetFps)
+	}
+
 	// Camera2特有方法
 	fun getCameraDevice(): CameraDevice? = cameraDevice
 	fun getCaptureSession(): CameraCaptureSession? = captureSession
