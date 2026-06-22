@@ -16,8 +16,9 @@ android {
 dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
-    implementation("com.rabbitmq:amqp-client:5.16.0")
     implementation(libs.kotlinx.serialization.json)
+    implementation("com.rabbitmq:amqp-client:5.18.0")
+   // implementation(libs.amqp.client)
 }
 
 val versionNameFromTags: String by extra

@@ -16,6 +16,7 @@ android {
 dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.work.runtime)
 }
 
 val versionNameFromTags: String by extra

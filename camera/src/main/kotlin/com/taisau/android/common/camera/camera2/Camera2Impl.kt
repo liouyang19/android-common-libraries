@@ -4,13 +4,14 @@ import android.annotation.SuppressLint
 import com.taisau.android.common.camera.core.CameraInfo
 import com.taisau.android.common.camera.core.CameraState
 import com.taisau.android.common.camera.core.Resolution
-
-
 import android.content.Context
 import android.graphics.ImageFormat
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
+import android.hardware.camera2.params.OutputConfiguration
+import android.hardware.camera2.params.SessionConfiguration
 import android.media.ImageReader
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.Surface
@@ -18,15 +19,23 @@ import com.taisau.android.common.camera.core.CameraConfig
 import com.taisau.android.common.camera.core.CameraFacing
 import com.taisau.android.common.camera.core.CameraMode
 import com.taisau.android.common.camera.core.ICamera
+import com.taisau.android.common.camera.uitls.CameraLog
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
+import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
 class Camera2Impl(
-	private val config: CameraConfig
+	config: CameraConfig
 ) : ICamera {
+
+	private var config: CameraConfig = config
+	
+	companion object {
+		private const val CAMERA_LOCK_TIMEOUT_MS = 2500L
+	}
 	
 	override val cameraMode: CameraMode = CameraMode.CAMERA2
 	
@@ -36,6 +45,8 @@ class Camera2Impl(
 	private var currentCameraId: String? = null
 	private var cameraCharacteristics: CameraCharacteristics? = null
 	private var cameraInfo: CameraInfo? = null
+	private var imageReader: ImageReader? = null
+	private var previewSurfaces: List<Surface>? = null
 	
 	private var backgroundThread: HandlerThread? = null
 	private var backgroundHandler: Handler? = null
@@ -46,7 +57,8 @@ class Camera2Impl(
 	
 	override fun getCameraState(): CameraState = _cameraState.value
 	
-	override suspend fun initialize(context: Context) = withContext(Dispatchers.IO) {
+	override suspend fun initialize(context: Context) = withContext(Dispatchers.Main) {
+		CameraLog.d("Initializing Camera2")
 		cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
 		startBackgroundThread()
 	}
@@ -54,9 +66,17 @@ class Camera2Impl(
 	@SuppressLint("MissingPermission")
 	override suspend fun open(cameraId: String): Boolean = withContext(Dispatchers.Main) {
 		try {
+			val currentState = _cameraState.value
+			if (currentState !is CameraState.Closed && currentState !is CameraState.Error) {
+				CameraLog.w("Camera is not in closed state, current state: $currentState")
+			}
+			
 			_cameraState.value = CameraState.Opening
 			
-			if (!cameraOpenCloseLock.tryAcquire(2500, TimeUnit.MILLISECONDS)) {
+			val acquired = withContext(Dispatchers.IO) {
+				cameraOpenCloseLock.tryAcquire(CAMERA_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+			}
+			if (!acquired) {
 				throw RuntimeException("Timeout waiting to lock camera opening.")
 			}
 			
@@ -65,10 +85,10 @@ class Camera2Impl(
 			currentCameraId = cameraId
 			cameraCharacteristics = cameraManager?.getCameraCharacteristics(cameraId)
 			
-			// 构建CameraInfo
 			buildCameraInfo()
 			
-			suspendCancellableCoroutine<Boolean> { continuation ->
+			CameraLog.d("Opening camera ID: $cameraId")
+			suspendCancellableCoroutine { continuation ->
 				try {
 					cameraManager?.openCamera(
 						cameraId,
@@ -77,6 +97,7 @@ class Camera2Impl(
 								cameraDevice = device
 								_cameraState.value = CameraState.Opened
 								cameraOpenCloseLock.release()
+								CameraLog.d("Camera opened successfully, ID: $cameraId")
 								continuation.resume(true)
 							}
 							
@@ -85,6 +106,7 @@ class Camera2Impl(
 								cameraDevice = null
 								cameraOpenCloseLock.release()
 								_cameraState.value = CameraState.Closed
+								CameraLog.w("Camera disconnected")
 								if (continuation.isActive) {
 									continuation.resume(false)
 								}
@@ -94,8 +116,10 @@ class Camera2Impl(
 								device.close()
 								cameraDevice = null
 								cameraOpenCloseLock.release()
+								val errorMsg = "Camera error: $error"
+								CameraLog.e(errorMsg)
 								_cameraState.value = CameraState.Error(
-									RuntimeException("Camera error: $error")
+									RuntimeException(errorMsg)
 								)
 								if (continuation.isActive) {
 									continuation.resume(false)
@@ -107,6 +131,7 @@ class Camera2Impl(
 				} catch (e: CameraAccessException) {
 					cameraOpenCloseLock.release()
 					_cameraState.value = CameraState.Error(e)
+					CameraLog.e("CameraAccessException while opening camera", e)
 					if (continuation.isActive) {
 						continuation.resumeWith(Result.failure(e))
 					}
@@ -114,7 +139,9 @@ class Camera2Impl(
 			}
 		} catch (e: Exception) {
 			_cameraState.value = CameraState.Error(e)
-			throw RuntimeException("Failed to open camera: ${e.message}", e)
+			val errorMsg = "Failed to open camera: ${e.message}"
+			CameraLog.e(errorMsg, e)
+			throw RuntimeException(errorMsg, e)
 		}
 	}
 	
@@ -138,128 +165,156 @@ class Camera2Impl(
 		surfaces: List<Surface>,
 		onSessionConfigured: suspend (session: Any) -> Unit
 	) = withContext(Dispatchers.Main) {
-		val device = cameraDevice ?: throw IllegalStateException("Camera not opened")
+		ensureCameraOpened()
+		val device = cameraDevice ?: return@withContext
 		
+		CameraLog.d("Creating capture session with ${surfaces.size} surface(s)")
 		suspendCancellableCoroutine { continuation ->
 			try {
-				device.createCaptureSession(
-					surfaces,
-					object : CameraCaptureSession.StateCallback() {
-						override fun onConfigured(session: CameraCaptureSession) {
-							captureSession = session
-							scope.launch {
-								try {
-									onSessionConfigured(session)
-									continuation.resume(Unit)
-								} catch (e: Exception) {
-									continuation.resumeWith(Result.failure(e))
-								}
+				val stateCallback = object : CameraCaptureSession.StateCallback() {
+					override fun onConfigured(session: CameraCaptureSession) {
+						captureSession = session
+						scope.launch {
+							try {
+								onSessionConfigured(session)
+								CameraLog.d("Capture session created")
+								continuation.resume(Unit)
+							} catch (e: Exception) {
+								continuation.resumeWith(Result.failure(e))
 							}
 						}
-						
-						override fun onConfigureFailed(session: CameraCaptureSession) {
-							continuation.resumeWith(
-								Result.failure(
-									RuntimeException("Failed to configure camera session")
-								)
-							)
-						}
-					},
-					backgroundHandler
-				)
+					}
+					
+					override fun onConfigureFailed(session: CameraCaptureSession) {
+						val errorMsg = "Failed to configure camera session"
+						CameraLog.e(errorMsg)
+						continuation.resumeWith(
+							Result.failure(RuntimeException(errorMsg))
+						)
+					}
+				}
+				
+				if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+					val executor = Executors.newSingleThreadExecutor()
+					val outputConfigs = surfaces.map { OutputConfiguration(it) }
+					val sessionConfig = SessionConfiguration(
+						SessionConfiguration.SESSION_REGULAR,
+						outputConfigs,
+						executor,
+						stateCallback
+					)
+					device.createCaptureSession(sessionConfig)
+				} else {
+					@Suppress("DEPRECATION")
+					device.createCaptureSession(surfaces, stateCallback, backgroundHandler)
+				}
 			} catch (e: CameraAccessException) {
+				CameraLog.e("CameraAccessException while creating capture session", e)
 				continuation.resumeWith(Result.failure(e))
 			}
 		}
 	}
 	
 	override suspend fun closeCaptureSession() = withContext(Dispatchers.Main) {
+		CameraLog.d("Closing capture session")
 		try {
 			captureSession?.close()
 			captureSession = null
 		} catch (e: Exception) {
+			CameraLog.e("Failed to close capture session", e)
 			throw RuntimeException("Failed to close capture session", e)
 		}
 	}
 	
 	override suspend fun setRepeatingRequest(surfaces: List<Surface>) = withContext(Dispatchers.Main) {
-		val device = cameraDevice ?: throw IllegalStateException("Camera not opened")
+		ensureCameraOpened()
 		val session = captureSession ?: throw IllegalStateException("Capture session not created")
-		
+		val device = cameraDevice ?: return@withContext
+
+		previewSurfaces = surfaces
+
 		try {
-			val requestBuilder = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-			
-			surfaces.forEach { surface ->
-				requestBuilder.addTarget(surface)
-			}
-			
-			// 应用配置
-			if (config.enableAutoFocus) {
-				requestBuilder.set(
-					CaptureRequest.CONTROL_AF_MODE,
-					CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
-				)
-			}
-			
-			// 应用Camera2特定配置
-			config.camera2Config?.let { camera2Config ->
-				camera2Config.controlAfMode?.let {
-					requestBuilder.set(CaptureRequest.CONTROL_AF_MODE, it)
-				}
-				camera2Config.controlAeMode?.let {
-					requestBuilder.set(CaptureRequest.CONTROL_AE_MODE, it)
-				}
-				camera2Config.noiseReductionMode?.let {
-					requestBuilder.set(CaptureRequest.NOISE_REDUCTION_MODE, it)
-				}
-				camera2Config.edgeMode?.let {
-					requestBuilder.set(CaptureRequest.EDGE_MODE, it)
-				}
-				requestBuilder.set(
-					CaptureRequest.JPEG_QUALITY,
-					camera2Config.jpegQuality
-				)
-			}
-			
-			session.setRepeatingRequest(
-				requestBuilder.build(),
-				object : CameraCaptureSession.CaptureCallback() {
-					override fun onCaptureFailed(
-						session: CameraCaptureSession,
-						request: CaptureRequest,
-						failure: CaptureFailure
-					) {
-						_cameraState.value = CameraState.Error(
-							RuntimeException("Capture failed: $failure")
-						)
-					}
-				},
-				backgroundHandler
-			)
+			buildAndSetRepeatingRequest(device, session, surfaces)
 			
 			_cameraState.value = CameraState.Previewing
+			CameraLog.d("Repeating request set, preview started")
 		} catch (e: CameraAccessException) {
+			CameraLog.e("Failed to set repeating request", e)
 			throw RuntimeException("Failed to set repeating request", e)
 		}
+	}
+
+	private fun buildAndSetRepeatingRequest(
+		device: CameraDevice,
+		session: CameraCaptureSession,
+		surfaces: List<Surface>
+	) {
+		val requestBuilder = device.createCaptureRequest(
+			config.camera2Config?.captureRequestTemplate?.toCameraTemplate()
+				?: CameraDevice.TEMPLATE_PREVIEW
+		)
+		surfaces.forEach { requestBuilder.addTarget(it) }
+		applyCaptureRequestConfig(requestBuilder, config)
+		session.setRepeatingRequest(
+			requestBuilder.build(),
+			object : CameraCaptureSession.CaptureCallback() {
+				override fun onCaptureFailed(
+					session: CameraCaptureSession,
+					request: CaptureRequest,
+					failure: CaptureFailure
+				) {
+					val errorMsg = "Capture failed: $failure"
+					CameraLog.e(errorMsg)
+					_cameraState.value = CameraState.Error(
+						RuntimeException(errorMsg)
+					)
+				}
+			},
+			backgroundHandler
+		)
 	}
 	
 	override suspend fun capture(
 		surface: Surface,
 		callback: (ByteArray) -> Unit
 	): Unit = withContext(Dispatchers.Main) {
-		val device = cameraDevice ?: throw IllegalStateException("Camera not opened")
+		ensureCameraOpened()
 		val session = captureSession ?: throw IllegalStateException("Capture session not created")
+		val device = cameraDevice ?: return@withContext
 		
 		try {
+			CameraLog.d("Capturing photo")
+			
+			val captureWidth = config.captureResolution.width
+			val captureHeight = config.captureResolution.height
+			
+			imageReader = ImageReader.newInstance(
+				captureWidth, captureHeight,
+				ImageFormat.JPEG, 2
+			).also { reader ->
+				reader.setOnImageAvailableListener({ reader ->
+					val image = reader.acquireLatestImage()
+					image?.use { img ->
+						val buffer = img.planes[0].buffer
+						val bytes = ByteArray(buffer.remaining())
+						buffer.get(bytes)
+						scope.launch(Dispatchers.IO) {
+							callback(bytes)
+						}
+					}
+				}, backgroundHandler)
+			}
+			
 			val captureBuilder = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
+			captureBuilder.addTarget(imageReader!!.surface)
 			captureBuilder.addTarget(surface)
 			
-			if (config.enableAutoFocus) {
-				captureBuilder.set(
-					CaptureRequest.CONTROL_AF_MODE,
-					CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
-				)
-			}
+			applyCaptureRequestConfig(captureBuilder, config)
+			
+			captureBuilder.set(
+				CaptureRequest.JPEG_ORIENTATION,
+				cameraCharacteristics?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
+			)
 			
 			session.capture(
 				captureBuilder.build(),
@@ -269,12 +324,21 @@ class Camera2Impl(
 						request: CaptureRequest,
 						result: TotalCaptureResult
 					) {
-						// 拍照完成
+						CameraLog.d("Capture completed")
+					}
+					
+					override fun onCaptureFailed(
+						session: CameraCaptureSession,
+						request: CaptureRequest,
+						failure: CaptureFailure
+					) {
+						CameraLog.e("Capture failed: reason=${failure.reason}")
 					}
 				},
 				backgroundHandler
 			)
 		} catch (e: CameraAccessException) {
+			CameraLog.e("Failed to capture", e)
 			throw RuntimeException("Failed to capture", e)
 		}
 	}
@@ -305,7 +369,20 @@ class Camera2Impl(
 	override fun isOpen(): Boolean = cameraDevice != null
 	
 	override suspend fun close() = withContext(Dispatchers.Main) {
-		closeInternal()
+		CameraLog.d("Closing camera")
+		val acquired = withContext(Dispatchers.IO) {
+			cameraOpenCloseLock.tryAcquire(CAMERA_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+		}
+		if (!acquired) {
+			CameraLog.w("Timeout waiting to lock camera closing")
+		}
+		try {
+			closeInternal()
+		} finally {
+			cameraOpenCloseLock.release()
+		}
+		imageReader?.close()
+		imageReader = null
 		_cameraState.value = CameraState.Closed
 	}
 	
@@ -316,30 +393,116 @@ class Camera2Impl(
 			cameraDevice?.close()
 			cameraDevice = null
 		} catch (e: Exception) {
-			// 忽略关闭时的异常
+			CameraLog.e("Error during closeInternal", e)
 		}
 	}
 	
-	override suspend fun release() = withContext(Dispatchers.Main) {
-		closeInternal()
-		stopBackgroundThread()
-		scope.cancel()
+	override suspend fun release() {
+		withContext(Dispatchers.Main) {
+			CameraLog.d("Releasing camera resources")
+			val acquired = withContext(Dispatchers.IO) {
+				cameraOpenCloseLock.tryAcquire(CAMERA_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+			}
+			if (!acquired) {
+				CameraLog.w("Timeout waiting to lock camera release")
+			}
+			try {
+				closeInternal()
+			} finally {
+				cameraOpenCloseLock.release()
+			}
+			imageReader?.close()
+			imageReader = null
+			stopBackgroundThread()
+			scope.cancel()
+			CameraLog.d("Camera resources released")
+		}
+	}
+
+	override suspend fun updateConfig(config: CameraConfig) = withContext(Dispatchers.Main) {
+		this@Camera2Impl.config = config
+		CameraLog.d("Camera config updated dynamically")
+		val device = cameraDevice
+		val session = captureSession
+		val surfaces = previewSurfaces
+		if (device != null && session != null && surfaces != null) {
+			try {
+				buildAndSetRepeatingRequest(device, session, surfaces)
+				CameraLog.d("Repeating request updated with new config")
+			} catch (e: CameraAccessException) {
+				CameraLog.e("Failed to update repeating request", e)
+			}
+		}
 	}
 	
 	private fun startBackgroundThread() {
 		backgroundThread = HandlerThread("Camera2Background").also { it.start() }
 		backgroundHandler = Handler(backgroundThread!!.looper)
+		CameraLog.d("Background thread started")
 	}
 	
 	private fun stopBackgroundThread() {
 		backgroundThread?.quitSafely()
 		try {
 			backgroundThread?.join()
+			CameraLog.d("Background thread stopped")
 		} catch (e: InterruptedException) {
-			e.printStackTrace()
+			CameraLog.e("Error stopping background thread", e)
 		}
 		backgroundThread = null
 		backgroundHandler = null
+	}
+	
+	private fun ensureCameraOpened() {
+		if (cameraDevice == null) {
+			throw IllegalStateException("Camera not opened")
+		}
+	}
+	
+
+	/**
+	 * 将Camera2Config的模板类型转换为CameraDevice模板常量
+	 */
+	private fun Camera2Config.TemplateType.toCameraTemplate(): Int = when (this) {
+		Camera2Config.TemplateType.PREVIEW -> CameraDevice.TEMPLATE_PREVIEW
+		Camera2Config.TemplateType.STILL_CAPTURE -> CameraDevice.TEMPLATE_STILL_CAPTURE
+		Camera2Config.TemplateType.RECORD -> CameraDevice.TEMPLATE_RECORD
+		Camera2Config.TemplateType.ZERO_SHUTTER_LAG -> CameraDevice.TEMPLATE_ZERO_SHUTTER_LAG
+	}
+	
+	/**
+	 * 将公共配置和Camera2特定配置应用到CaptureRequest.Builder
+	 */
+	private fun applyCaptureRequestConfig(builder: CaptureRequest.Builder, config: CameraConfig) {
+		if (config.enableAutoFocus) {
+			builder.set(
+				CaptureRequest.CONTROL_AF_MODE,
+				CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+			)
+		}
+		
+		if (config.enableFlash) {
+			builder.set(
+				CaptureRequest.CONTROL_AE_MODE,
+				CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH
+			)
+		}
+		
+		config.camera2Config?.let { camera2Config ->
+			camera2Config.controlAfMode?.let {
+				builder.set(CaptureRequest.CONTROL_AF_MODE, it)
+			}
+			camera2Config.controlAeMode?.let {
+				builder.set(CaptureRequest.CONTROL_AE_MODE, it)
+			}
+			camera2Config.noiseReductionMode?.let {
+				builder.set(CaptureRequest.NOISE_REDUCTION_MODE, it)
+			}
+			camera2Config.edgeMode?.let {
+				builder.set(CaptureRequest.EDGE_MODE, it)
+			}
+			builder.set(CaptureRequest.JPEG_QUALITY, camera2Config.jpegQuality)
+		}
 	}
 	
 	// Camera2特有方法
