@@ -1,20 +1,19 @@
 package com.taisau.android.common.download.utils
 
 import android.util.Log
+import com.taisau.android.common.download.LogPriority
+import com.taisau.android.common.download.Logger
 
-interface DownloadLogger {
-    fun log(priority: LogPriority, tag: String, message: String, throwable: Throwable? = null)
-    enum class LogPriority { VERBOSE, DEBUG, INFO, WARN, ERROR }
-}
 
-class DefaultDownloadLogger : DownloadLogger {
-    override fun log(priority: DownloadLogger.LogPriority, tag: String, message: String, throwable: Throwable?) {
+internal class DownloadLogger(val enableLog: Boolean) : Logger {
+    override fun log(priority: LogPriority, tag: String, message: String , throwable: Throwable?) {
+        if (!enableLog) return
         val logPriority = when (priority) {
-            DownloadLogger.LogPriority.VERBOSE -> Log.VERBOSE
-            DownloadLogger.LogPriority.DEBUG -> Log.DEBUG
-            DownloadLogger.LogPriority.INFO -> Log.INFO
-            DownloadLogger.LogPriority.WARN -> Log.WARN
-            DownloadLogger.LogPriority.ERROR -> Log.ERROR
+            LogPriority.VERBOSE -> Log.VERBOSE
+            LogPriority.DEBUG -> Log.DEBUG
+            LogPriority.INFO -> Log.INFO
+            LogPriority.WARN -> Log.WARN
+            LogPriority.ERROR -> Log.ERROR
         }
         if (throwable != null) Log.println(logPriority, tag, "$message\n${Log.getStackTraceString(throwable)}")
         else Log.println(logPriority, tag, message)

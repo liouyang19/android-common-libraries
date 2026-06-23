@@ -6,13 +6,19 @@ import com.taisau.android.common.download.DownloadManager
 import com.taisau.android.common.download.DownloadPriority
 import com.taisau.android.common.download.DownloadStatus
 import com.taisau.android.common.download.Disposable
+import com.taisau.android.common.download.LogPriority
+import com.taisau.android.common.download.Logger
 import com.taisau.android.common.download.TaskStatus
 import com.taisau.android.common.download.db.DownloadDao
 import com.taisau.android.common.download.db.toEntity
+import com.taisau.android.common.download.e
 import com.taisau.android.common.download.engine.DownloadEngine
+import com.taisau.android.common.download.i
 import com.taisau.android.common.download.utils.DownloadLogger
+import com.taisau.android.common.download.w
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -56,11 +62,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal class DownloadManagerImpl(
     val config: DownloadConfig,
     private val downloadDao: DownloadDao,
-    private val engine: DownloadEngine = config.engine
+    private val engine: DownloadEngine,
+    private val logger: Logger
 ) : DownloadManager {
-
-    // ── 协程作用域 ──
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        logger.e(
+            message = "Exception in DownloadManager Scope: ${throwable.message}",
+            throwable = throwable
+        )
+    }
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler)
 
     // ── 任务管理 ──
     private val downloaders = ConcurrentHashMap<String, IDownloader>()
@@ -77,6 +89,8 @@ internal class DownloadManagerImpl(
 
     // ── 状态流 ──
     private val allDownloadsFlow = MutableStateFlow<List<DownloadInfo>>(emptyList())
+   
+    
 
     init {
         startRefreshLoop()
@@ -144,12 +158,7 @@ internal class DownloadManagerImpl(
             } catch (_: CancellationException) {
                 // 再次暂停或取消，不处理
             } catch (e: Exception) {
-                config.logger.log(
-                    DownloadLogger.LogPriority.ERROR,
-                    "DownloadMgr",
-                    "恢复下载失败: $downloadId",
-                    e
-                )
+                logger.e(message = "恢复下载失败: $downloadId", throwable =  e)
                 downloadDao.updateStatus(downloadId, TaskStatus.FAILED.name)
             }
         }
@@ -275,11 +284,10 @@ internal class DownloadManagerImpl(
                         } catch (e: CancellationException) {
                             // 暂停/取消导致的取消，不处理
                         } catch (e: Exception) {
-                            config.logger.log(
-                                DownloadLogger.LogPriority.ERROR,
-                                "DownloadMgr",
-                                "下载失败: ${nextRequest.url}",
-                                e
+                            logger.log(
+                                priority = LogPriority.ERROR,
+                                message = "下载失败: ${nextRequest.url}",
+                                throwable = e
                             )
                             downloadDao.updateStatus(id, TaskStatus.FAILED.name)
                         }
@@ -303,11 +311,10 @@ internal class DownloadManagerImpl(
         val fileSize = try {
             engine.getContentLength(request, config)
         } catch (e: Exception) {
-            config.logger.log(
-                DownloadLogger.LogPriority.WARN,
-                "DownloadMgr",
-                "无法获取文件大小，降级为单文件下载",
-                e
+            logger.log(
+                LogPriority.WARN,
+                message = "无法获取文件大小，降级为单文件下载",
+                throwable = e
             )
             executeSingleDownload(request)
             return
@@ -322,11 +329,7 @@ internal class DownloadManagerImpl(
             if (supportRange) {
                 executeChunkedDownload(request, fileSize)
             } else {
-                config.logger.log(
-                    DownloadLogger.LogPriority.INFO,
-                    "DownloadMgr",
-                    "服务器不支持 Range，降级为单文件下载"
-                )
+                logger.i(message = "服务器不支持 Range，降级为单文件下载")
                 executeSingleDownload(request)
             }
         } else {
@@ -450,11 +453,7 @@ internal class DownloadManagerImpl(
             val remainingBytes = totalBytes - downloadedBytes
             val usableSpace = parentDir.usableSpace
             if (usableSpace < remainingBytes) {
-                config.logger.log(
-                    DownloadLogger.LogPriority.WARN,
-                    "DownloadMgr",
-                    "磁盘空间不足: 需要 ${remainingBytes / 1024 / 1024}MB, 可用 ${usableSpace / 1024 / 1024}MB"
-                )
+                logger.w(message = "磁盘空间不足: 需要 ${remainingBytes / 1024 / 1024}MB, 可用 ${usableSpace / 1024 / 1024}MB")
                 return false
             }
         }
@@ -474,5 +473,9 @@ internal class DownloadManagerImpl(
                 // Room 查询异常时静默处理
             }
         }
+    }
+    
+    companion object {
+       private const val TAG = "DownloadManager"
     }
 }

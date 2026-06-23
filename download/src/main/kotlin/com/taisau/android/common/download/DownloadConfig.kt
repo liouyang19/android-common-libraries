@@ -1,10 +1,8 @@
 package com.taisau.android.common.download
 
 import com.taisau.android.common.download.db.DownloadDao
-import com.taisau.android.common.download.download.DownloadRequest
 import com.taisau.android.common.download.engine.DownloadEngine
-import com.taisau.android.common.download.utils.DefaultDownloadLogger
-import com.taisau.android.common.download.utils.DownloadLogger
+
 
 /**
  * 下载管理器的配置参数。
@@ -19,8 +17,6 @@ data class DownloadConfig(
     val connectTimeout: Long = 15_000L,
     val readTimeout: Long = 15_000L,
     val defaultFilePath: String,
-    val logger: DownloadLogger = DefaultDownloadLogger(),
-    val interceptor: DownloadInterceptor? = null,
     val chunkedConfig: ChunkedConfig = ChunkedConfig()
 )
 
@@ -39,14 +35,3 @@ data class ChunkedConfig(
     val maxParallelChunks: Int = 3
 )
 
-/**
- * 下载拦截器 —— 允许在下载前后插入自定义逻辑。
- */
-interface DownloadInterceptor {
-    suspend fun intercept(chain: Chain): DownloadStatus
-
-    interface Chain {
-        val request: DownloadRequest
-        suspend fun proceed(request: DownloadRequest): DownloadStatus
-    }
-}

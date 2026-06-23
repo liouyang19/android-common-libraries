@@ -9,7 +9,6 @@ import com.taisau.android.common.download.download.DownloadManagerImpl
 import com.taisau.android.common.download.download.DownloadRequest
 import com.taisau.android.common.download.engine.DownloadEngine
 import com.taisau.android.common.download.engine.OkHttpEngine
-import com.taisau.android.common.download.utils.DefaultDownloadLogger
 import com.taisau.android.common.download.utils.DownloadLogger
 import kotlinx.coroutines.flow.Flow
 import java.io.File
@@ -133,8 +132,9 @@ interface DownloadManager {
         private var connectTimeout: Int = 15_000
         private var readTimeout: Int = 15_000
         private var engine: DownloadEngine = OkHttpEngine()
+        
+        private var logger: Logger = DownloadLogger(false)
         private var downloadDao: DownloadDao = RoomDownloadDao(context)
-        private var logger: DownloadLogger? = null
         private var chunkedEnabled: Boolean = true
         private var chunkedFileSizeThreshold: Long = 10 * 1024 * 1024L
         private var chunkedChunkSize: Long = 5 * 1024 * 1024L
@@ -152,7 +152,13 @@ interface DownloadManager {
         }
         fun setConnectTimeout(timeout: Int) = apply { connectTimeout = timeout }
         fun setReadTimeout(timeout: Int) = apply { readTimeout = timeout }
-        fun setLogger(logger: DownloadLogger) = apply { this.logger = logger }
+        
+        fun enableLogs(enabled: Boolean) = apply {
+            this.logger = DownloadLogger(enabled)
+        }
+        fun setLogger(logger: Logger) = apply {
+            this.logger = logger
+        }
 
         /** 配置分片下载 */
         fun setChunkedConfig(
@@ -183,7 +189,6 @@ interface DownloadManager {
                 connectTimeout = connectTimeout.toLong(),
                 readTimeout = readTimeout.toLong(),
                 defaultFilePath = finalPath,
-                logger = logger ?: DefaultDownloadLogger(),
                 chunkedConfig = ChunkedConfig(
                     enabled = chunkedEnabled,
                     fileSizeThreshold = chunkedFileSizeThreshold,
@@ -191,7 +196,7 @@ interface DownloadManager {
                     maxParallelChunks = chunkedMaxParallel
                 )
             )
-            return DownloadManagerImpl(config, downloadDao)
+            return DownloadManagerImpl(config, downloadDao,engine ,logger)
         }
     }
 }

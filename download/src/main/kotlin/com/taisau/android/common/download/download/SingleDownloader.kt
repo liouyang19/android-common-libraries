@@ -15,6 +15,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 单文件下载执行器 —— 处理断点续传、ETag 校验、重试，内部使用 [DownloadTask] 执行实际范围下载。
@@ -100,7 +101,7 @@ internal class SingleDownloader(
                     "SingleDownloader",
                     "下载失败，第 $retryCount 次重试: ${e.message}"
                 )
-                delay(1000L * retryCount)
+                delay((1000L * retryCount).milliseconds)
             }
         }
     }
