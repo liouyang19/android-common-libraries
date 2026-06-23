@@ -63,6 +63,14 @@ interface DownloadManager {
     fun pause(downloadId: String)
 
     /**
+     * 恢复已暂停的下载。
+     *
+     * 仅当 [DownloadManager] 内存中仍持有该下载器实例时有效
+     *（最近刚 [pause] 但尚未被移除）。若下载器已被清理，请重新 [enqueue]。
+     */
+    fun resume(downloadId: String)
+
+    /**
      * 取消指定下载。
      *
      * @param downloadId 下载 ID
@@ -168,7 +176,6 @@ interface DownloadManager {
             } else outputDir
 
             val config = DownloadConfig(
-                context = appContext,
                 engine = engine,
                 downloadDao = downloadDao,
                 maxConcurrent = maxConcurrent,

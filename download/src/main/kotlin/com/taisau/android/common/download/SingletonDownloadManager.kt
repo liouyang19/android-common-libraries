@@ -60,23 +60,18 @@ object SingletonDownloadManager {
      * 安全地设置 [Factory]。
      *
      * - 如果尚未创建 [DownloadManager]，将原子地设置工厂。
-     * - 如果已经通过默认工厂创建了实例，抛出 [IllegalStateException]。
-     * - 如果已经设置了自定义 [DownloadManager] 或工厂，静默忽略。
+     * - 如果已经创建了 [DownloadManager] 实例，抛出 [IllegalStateException]。
      *
-     * 应在 Application.onCreate 中尽早调用。
+     * 应在 Application.onCreate 中尽早调用，必须在首次调用 `context.downloadManager` 之前。
      */
     @JvmStatic
     fun setSafe(factory: Factory) {
         val value = reference.get()
         if (value is DownloadManager) {
-            if (value.isDefault) {
-                error(
-                    "SingletonDownloadManager 已被默认工厂创建，无法再设置自定义工厂。 " +
-                            "请确保在首次调用 'context.downloadManager' 之前调用 setSafe。",
-                )
-            }
-            // 已有自定义实例，忽略
-            return
+            error(
+                "SingletonDownloadManager 已被创建，无法再设置自定义工厂。 " +
+                        "请确保在首次调用 'context.downloadManager' 之前调用 setSafe。",
+            )
         }
         reference.compareAndSet(value, factory)
     }
@@ -160,13 +155,3 @@ object SingletonDownloadManager {
 private val DefaultFactory = SingletonDownloadManager.Factory { context ->
     DownloadManager.Builder(context).build()
 }
-
-/**
- * 判断 [DownloadManager] 是否为默认实现（简化实现）。
- *
- * 用作 [SingletonDownloadManager.setSafe] 的保护检查：
- * - 如果当前实例是默认创建的（未自定义），[setSafe] 会报错提示用户。
- * - 如果当前实例是自定义的（非默认），[setSafe] 静默忽略。
- */
-private val DownloadManager.isDefault: Boolean
-    get() = true // 简化实现: 始终视为默认，需要时可在子类中重写

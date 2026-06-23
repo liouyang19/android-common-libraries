@@ -12,12 +12,11 @@ import com.taisau.android.common.download.db.toEntity
 import com.taisau.android.common.download.engine.DownloadEngine
 import com.taisau.android.common.download.utils.DownloadLogger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -49,7 +48,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * ### 调度流程
  * ```
- * enqueue(request) ──→ Channel ──→ PriorityQueue ──→ Semaphore ──→ DownloadTask.execute()
+ * enqueue(request) ──→ Channel ──→ PriorityQueue ──→ Semaphore ──→ IDownloader.execute()
  *                              ↑                          ↑
  *                        dispatchTrigger            withPermit 阻塞
  * ```
@@ -62,11 +61,10 @@ internal class DownloadManagerImpl(
 
     // ── 协程作用域 ──
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val ioDispatcher = Dispatchers.IO
 
     // ── 任务管理 ──
-    private val tasks = ConcurrentHashMap<String, DownloadTask>()
-    private val chunkedTasks = ConcurrentHashMap<String, ChunkedDownloader>()
+    private val downloaders = ConcurrentHashMap<String, IDownloader>()
+    private val pendingDeferreds = ConcurrentHashMap<String, CompletableDeferred<DownloadStatus>>()
     private val isShutDown = AtomicBoolean(false)
 
     // ── Gemini 核心调度器 ──
@@ -79,11 +77,9 @@ internal class DownloadManagerImpl(
 
     // ── 状态流 ──
     private val allDownloadsFlow = MutableStateFlow<List<DownloadInfo>>(emptyList())
-    private val refreshTrigger = Channel<Unit>(Channel.CONFLATED)
 
     init {
         startRefreshLoop()
-        refreshTrigger.trySend(Unit)
         startDispatcherLoop()
     }
 
@@ -95,8 +91,10 @@ internal class DownloadManagerImpl(
         check(!isShutDown.get()) { "DownloadManager 已关闭" }
         val id = request.calculateDownloadId()
 
-        // 线程安全地加入优先级队列
-        scope.launch(ioDispatcher) {
+        val deferred = CompletableDeferred<DownloadStatus>()
+        pendingDeferreds[id] = deferred
+
+        scope.launch {
             queueLock.withLock {
                 priorityQueue.removeAll { it.calculateDownloadId() == id }
                 priorityQueue.add(request)
@@ -104,20 +102,15 @@ internal class DownloadManagerImpl(
             dispatchTrigger.trySend(Unit)
         }
 
-        // 创建 Deferred 用于调用方等待
-        val deferred = scope.async(ioDispatcher) {
-            // 实际由调度器执行，此处仅作占位
-            DownloadStatus.Waiting(id)
-        }
-
         return object : Disposable {
             override val downloadId: String = id
             override val job: Deferred<DownloadStatus> = deferred
-            override val isDisposed: Boolean = !tasks.containsKey(id) && !chunkedTasks.containsKey(id)
+            override val isDisposed: Boolean = deferred.isCompleted
 
             override fun dispose() {
                 cancel(id)
-                scope.launch(ioDispatcher) {
+                pendingDeferreds.remove(id)
+                scope.launch {
                     queueLock.withLock {
                         priorityQueue.removeAll { it.calculateDownloadId() == id }
                     }
@@ -138,17 +131,40 @@ internal class DownloadManagerImpl(
     }
 
     override fun pause(downloadId: String) {
-        tasks[downloadId]?.let { /* 单文件下载不支持暂停，通过协程取消实现 */ }
-        chunkedTasks[downloadId]?.pause()
+        downloaders[downloadId]?.pause()
+    }
+
+    override fun resume(downloadId: String) {
+        val downloader = downloaders[downloadId] ?: return
+        scope.launch {
+            try {
+                downloader.resume().collect { status ->
+                    handleDownloadStatus(downloadId, status)
+                }
+            } catch (_: CancellationException) {
+                // 再次暂停或取消，不处理
+            } catch (e: Exception) {
+                config.logger.log(
+                    DownloadLogger.LogPriority.ERROR,
+                    "DownloadMgr",
+                    "恢复下载失败: $downloadId",
+                    e
+                )
+                downloadDao.updateStatus(downloadId, TaskStatus.FAILED.name)
+            }
+        }
     }
 
     override fun cancel(downloadId: String, deleteFile: Boolean) {
-        tasks.remove(downloadId)
-        chunkedTasks[downloadId]?.cancel()
-        chunkedTasks.remove(downloadId)
+        downloaders[downloadId]?.cancel()
+        downloaders.remove(downloadId)
+
+        pendingDeferreds.remove(downloadId)?.complete(
+            DownloadStatus.Cancelled(downloadId)
+        )
 
         if (deleteFile) {
-            scope.launch(ioDispatcher) {
+            scope.launch {
                 val info = downloadDao.getDownloadInfo(downloadId)
                 info?.let {
                     File(it.filePath).delete()
@@ -157,7 +173,7 @@ internal class DownloadManagerImpl(
                 }
             }
         } else {
-            scope.launch(ioDispatcher) {
+            scope.launch {
                 downloadDao.updateStatus(downloadId, TaskStatus.CANCELLED.name)
             }
         }
@@ -183,13 +199,15 @@ internal class DownloadManagerImpl(
     }
 
     override fun pauseAll() {
-        chunkedTasks.values.forEach { it.pause() }
+        downloaders.values.forEach { it.pause() }
     }
 
     override suspend fun cancelAll(deleteFiles: Boolean) {
-        tasks.clear()
-        chunkedTasks.values.forEach { it.cancel() }
-        chunkedTasks.clear()
+        downloaders.values.forEach { it.cancel() }
+        downloaders.clear()
+
+        pendingDeferreds.forEach { (id, d) -> d.complete(DownloadStatus.Cancelled(id)) }
+        pendingDeferreds.clear()
 
         if (deleteFiles) {
             val allDownloads = mutableListOf<DownloadInfo>()
@@ -208,14 +226,14 @@ internal class DownloadManagerImpl(
             completed.forEach { File(it.filePath).delete() }
         }
         downloadDao.clearCompleted()
-        refreshAllDownloads()
     }
 
     override fun destroy() {
         if (isShutDown.compareAndSet(false, true)) {
-            tasks.clear()
-            chunkedTasks.values.forEach { it.cancel() }
-            chunkedTasks.clear()
+            downloaders.values.forEach { it.cancel() }
+            downloaders.clear()
+            pendingDeferreds.forEach { (id, d) -> d.complete(DownloadStatus.Cancelled(id)) }
+            pendingDeferreds.clear()
             scope.cancel()
         }
     }
@@ -231,31 +249,27 @@ internal class DownloadManagerImpl(
      * 无任务时零 CPU 消耗。
      */
     private fun startDispatcherLoop() {
-        scope.launch(ioDispatcher) {
+        scope.launch {
             for (trigger in dispatchTrigger) {
                 if (isShutDown.get()) break
 
                 while (isActive) {
-                    // 从优先级队列取出最高权重的请求
                     val nextRequest = queueLock.withLock { priorityQueue.poll() }
-                        ?: break // 队列为空，挂起等待下一次 dispatchTrigger
+                        ?: break
 
                     val id = nextRequest.calculateDownloadId()
-                    if (tasks.containsKey(id) && !chunkedTasks.containsKey(id)) continue
+                    if (downloaders.containsKey(id)) continue
 
                     // 为每个任务启动独立子协程去抢占信号量
                     launch {
                         try {
                             semaphore.withPermit {
-                                // 磁盘空间预检
                                 if (!preCheckDiskSpace(nextRequest)) {
                                     val error = IOException("磁盘空间不足，无法下载 ${nextRequest.fileName}")
                                     downloadDao.updateStatus(id, TaskStatus.FAILED.name)
-                                    refreshAllDownloads()
                                     return@withPermit
                                 }
 
-                                // 智能选择下载方式
                                 executeSmartDownload(nextRequest)
                             }
                         } catch (e: CancellationException) {
@@ -268,7 +282,6 @@ internal class DownloadManagerImpl(
                                 e
                             )
                             downloadDao.updateStatus(id, TaskStatus.FAILED.name)
-                            refreshAllDownloads()
                         }
                     }
                 }
@@ -282,13 +295,11 @@ internal class DownloadManagerImpl(
     private suspend fun executeSmartDownload(request: DownloadRequest) {
         val id = request.calculateDownloadId()
 
-        // 检查是否启用分片下载
         if (!config.chunkedConfig.enabled) {
             executeSingleDownload(request)
             return
         }
 
-        // 获取文件大小
         val fileSize = try {
             engine.getContentLength(request, config)
         } catch (e: Exception) {
@@ -302,9 +313,7 @@ internal class DownloadManagerImpl(
             return
         }
 
-        // 根据阈值决定下载方式
         if (fileSize > config.chunkedConfig.fileSizeThreshold) {
-            // 检查是否支持 Range
             val supportRange = try {
                 engine.supportRange(request, config)
             } catch (_: Exception) {
@@ -326,13 +335,12 @@ internal class DownloadManagerImpl(
     }
 
     /**
-     * 单文件下载。
+     * 单文件下载 —— 委托 [SingleDownloader]。
      */
     private suspend fun executeSingleDownload(request: DownloadRequest) {
         val id = request.calculateDownloadId()
         val existingInfo = downloadDao.getDownloadInfo(id)
 
-        // 创建/更新下载记录
         if (existingInfo == null) {
             val file = File(request.filePath, request.fileName)
             file.parentFile?.mkdirs()
@@ -345,31 +353,17 @@ internal class DownloadManagerImpl(
         } else {
             downloadDao.updateStatus(id, TaskStatus.DOWNLOADING.name)
         }
-        refreshAllDownloads()
 
-        val task = DownloadTask(request, config, engine)
-        tasks[id] = task
+        val downloader = SingleDownloader(request, config, engine)
+        downloaders[id] = downloader
 
         try {
-            task.execute(
+            downloader.execute(
                 existingEtag = existingInfo?.etag,
                 existingLastModified = existingInfo?.lastModified
-            ).collect { status ->
-                // 持久化进度
-                when (status) {
-                    is DownloadStatus.Progress -> {
-                        downloadDao.updateProgress(id, status.downloadedBytes, status.totalBytes)
-                        refreshAllDownloads()
-                    }
-                    is DownloadStatus.Success -> {
-                        downloadDao.updateStatus(id, TaskStatus.COMPLETED.name)
-                        refreshAllDownloads()
-                    }
-                    else -> {}
-                }
-            }
+            ).collect { status -> handleDownloadStatus(id, status) }
         } finally {
-            tasks.remove(id)
+            downloaders.remove(id)
         }
     }
 
@@ -380,7 +374,6 @@ internal class DownloadManagerImpl(
         val id = request.calculateDownloadId()
         val existingInfo = downloadDao.getDownloadInfo(id)
 
-        // 创建/更新下载记录
         if (existingInfo == null) {
             val file = File(request.filePath, request.fileName)
             file.parentFile?.mkdirs()
@@ -394,30 +387,17 @@ internal class DownloadManagerImpl(
         } else {
             downloadDao.updateStatus(id, TaskStatus.DOWNLOADING.name)
         }
-        refreshAllDownloads()
 
-        val chunkedDownloader = ChunkedDownloader(request, fileSize, config, downloadDao)
-        chunkedTasks[id] = chunkedDownloader
+        val downloader = ChunkedDownloader(request, fileSize, config, downloadDao)
+        downloaders[id] = downloader
 
         try {
-            chunkedDownloader.execute(
+            downloader.execute(
                 existingEtag = existingInfo?.etag,
                 existingLastModified = existingInfo?.lastModified
-            ).collect { status ->
-                when (status) {
-                    is DownloadStatus.Progress -> {
-                        downloadDao.updateProgress(id, status.downloadedBytes, status.totalBytes)
-                        refreshAllDownloads()
-                    }
-                    is DownloadStatus.Success -> {
-                        downloadDao.updateStatus(id, TaskStatus.COMPLETED.name)
-                        refreshAllDownloads()
-                    }
-                    else -> {}
-                }
-            }
+            ).collect { status -> handleDownloadStatus(id, status) }
         } finally {
-            chunkedTasks.remove(id)
+            downloaders.remove(id)
         }
     }
 
@@ -426,16 +406,41 @@ internal class DownloadManagerImpl(
     // ──────────────────────────────────────────────
 
     /**
-     * 磁盘空间预检 —— 在开始下载前检查剩余空间是否足够。
-     *
-     * 可防止下载到 99% 时因空间不足而崩溃（Gemini 优化点 2）。
+     * 公共状态处理 —— 被 [executeSingleDownload]、[executeChunkedDownload] 和 [resume] 共用。
+     */
+    private suspend fun handleDownloadStatus(id: String, status: DownloadStatus) {
+        when (status) {
+            is DownloadStatus.Progress -> {
+                downloadDao.updateProgress(id, status.downloadedBytes, status.totalBytes)
+            }
+            is DownloadStatus.Success -> {
+                downloadDao.updateStatus(id, TaskStatus.COMPLETED.name)
+                pendingDeferreds.remove(id)?.complete(status)
+            }
+            is DownloadStatus.Error -> {
+                downloadDao.updateStatus(id, TaskStatus.FAILED.name)
+                pendingDeferreds.remove(id)?.complete(status)
+            }
+            is DownloadStatus.Cancelled -> {
+                downloadDao.updateStatus(id, TaskStatus.CANCELLED.name)
+                pendingDeferreds.remove(id)?.complete(status)
+            }
+            is DownloadStatus.Paused -> {
+                downloadDao.updateStatus(id, TaskStatus.PAUSED.name)
+                pendingDeferreds.remove(id)?.complete(status)
+            }
+            else -> {}
+        }
+    }
+
+    /**
+     * 磁盘空间预检。
      */
     private suspend fun preCheckDiskSpace(request: DownloadRequest): Boolean {
         val file = File(request.filePath, request.fileName)
         val parentDir = file.parentFile ?: return true
         if (!parentDir.exists()) parentDir.mkdirs()
 
-        // 从数据库获取文件大小
         val id = request.calculateDownloadId()
         val info = downloadDao.getDownloadInfo(id)
         val totalBytes = info?.totalBytes ?: 0L
@@ -457,10 +462,10 @@ internal class DownloadManagerImpl(
     }
 
     /**
-     * 常驻刷新协程 —— 利用 Room Flow 的自动更新特性，只需 collect 一次。
+     * 常驻刷新协程 —— Room Flow 自动监听表变化并推送最新数据。
      */
     private fun startRefreshLoop() {
-        scope.launch(ioDispatcher) {
+        scope.launch {
             try {
                 downloadDao.getAllDownloads().collect { downloads ->
                     allDownloadsFlow.value = downloads
@@ -469,13 +474,5 @@ internal class DownloadManagerImpl(
                 // Room 查询异常时静默处理
             }
         }
-    }
-
-    /**
-     * 触发立即刷新 —— 仅在有独立 collector 前用于初始加载。
-     * 内部 collector 建立后 Room Flow 会自动推送变更。
-     */
-    private fun refreshAllDownloads() {
-        refreshTrigger.trySend(Unit)
     }
 }
