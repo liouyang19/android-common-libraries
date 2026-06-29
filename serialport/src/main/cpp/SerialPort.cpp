@@ -90,7 +90,7 @@ static speed_t  getBaudrate(jint baudrate){
 
 extern "C" JNIEXPORT jobject
 JNICALL
-Java_com_taisau_android_common_serialport_SerialPort_open(
+Java_com_taisau_android_common_serialport_SerialPortImpl_openNative(
         JNIEnv *env,
         jobject thiz,
         jstring absolute_path,
@@ -169,23 +169,34 @@ Java_com_taisau_android_common_serialport_SerialPort_open(
     jclass cFileDescriptor =  env->FindClass("java/io/FileDescriptor");
     jmethodID iFileDescriptor = env->GetMethodID(cFileDescriptor,"<init>", "()V");
     jobject mFileDescriptor = env->NewObject(cFileDescriptor,iFileDescriptor);
+
+    jfieldID fdField = env->GetFieldID(cFileDescriptor, "fd", "I");
+    if (fdField != nullptr) {
+        env->SetIntField(mFileDescriptor, fdField, fd);
+    }
+
     return mFileDescriptor;
 }
 
 extern "C" JNIEXPORT void
         JNICALL
-Java_com_taisau_android_common_serialport_SerialPort_close(
+Java_com_taisau_android_common_serialport_SerialPortImpl_closeNative(
         JNIEnv *env,
 jobject thiz) {
-jclass SerialPortClass = env->GetObjectClass(thiz);
+jclass SerialPortImplClass = env->GetObjectClass(thiz);
 jclass FileDescriptorClass = env->FindClass("java/io/FileDescriptor");
 
-jfieldID mFdID = env->GetFieldID( SerialPortClass, "mFd", "Ljava/io/FileDescriptor;");
+jfieldID fdID = env->GetFieldID(SerialPortImplClass, "fd", "Ljava/io/FileDescriptor;");
 jfieldID descriptorID = env->GetFieldID(FileDescriptorClass, "fd", "I");
 
-jobject mFd = env->GetObjectField( thiz, mFdID);
-jint descriptor = env->GetIntField( mFd, descriptorID);
+jobject fdObject = env->GetObjectField(thiz, fdID);
+if (fdObject == nullptr) {
+    return;
+}
 
-close(descriptor);
+jint descriptor = env->GetIntField(fdObject, descriptorID);
+if (descriptor > 0) {
+    close(descriptor);
+}
 
 }
