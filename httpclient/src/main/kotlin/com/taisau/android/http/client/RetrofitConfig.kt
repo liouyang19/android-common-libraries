@@ -1,9 +1,19 @@
-package com.taisau.android.common.retrofit
+package com.taisau.android.http.client
 
 import okhttp3.Interceptor
 import okhttp3.logging.HttpLoggingInterceptor
 import java.util.concurrent.TimeUnit
 
+/**
+ * Retrofit 客户端配置（已废弃，请使用 [ApiClientConfig] + [ApiClient]）。
+ */
+@Deprecated(
+    message = "请使用 ApiClient + ApiClientConfig 替代，提供 Ktor 风格的 DSL 配置",
+    replaceWith = ReplaceWith(
+        "ApiClientConfig",
+        "com.taisau.android.http.client.ApiClientConfig",
+    ),
+)
 data class RetrofitConfig(
     val baseUrl: String,
     val connectTimeout: Long = 30L,

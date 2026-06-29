@@ -1,4 +1,4 @@
-package com.taisau.android.common.retrofit
+package com.taisau.android.http.client
 
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -8,6 +8,16 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
+/**
+ * Retrofit 客户端管理器（已废弃，请使用 [ApiClient]）。
+ */
+@Deprecated(
+    message = "请使用 ApiClient 替代，它提供 Ktor 风格的 DSL 和实例级管理",
+    replaceWith = ReplaceWith(
+        "ApiClient",
+        "com.taisau.android.http.client.ApiClient",
+    ),
+)
 object RetrofitClient {
 
     private val cache = mutableMapOf<String, Retrofit>()
@@ -18,6 +28,11 @@ object RetrofitClient {
         encodeDefaults = true
         isLenient = true
         prettyPrint = false
+    }
+
+    @Deprecated("请使用 ApiClient 替代，不需要全局设置")
+    fun setEnvironment(environment: Any? = null) {
+        clearCache()
     }
 
     fun getRetrofit(config: RetrofitConfig): Retrofit {
@@ -95,6 +110,6 @@ object RetrofitClient {
     }
 
     fun removeCache(baseUrl: String) {
-        cache.remove(baseUrl)
+        cache.entries.removeAll { it.key.contains(baseUrl) }
     }
 }

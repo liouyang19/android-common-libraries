@@ -1,4 +1,4 @@
-package com.taisau.android.common.retrofit
+package com.taisau.android.http.client
 
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.delay
@@ -12,7 +12,7 @@ object ApiCaller {
     suspend fun <T> call(apiCall: suspend () -> T): ApiResult<T> {
         return try {
             ApiResult.Success(apiCall())
-        } catch (e: kotlin.Exception) {
+        } catch (e: Exception) {
             ApiResult.Exception(e)
         }
     }
@@ -22,7 +22,7 @@ object ApiCaller {
         retryCount: Int,
         retryDelayMs: Long = 1000L,
     ): ApiResult<T> {
-        var lastException: kotlin.Exception? = null
+        var lastException: Exception? = null
         for (i in 0..retryCount) {
             try {
                 return ApiResult.Success(apiCall())

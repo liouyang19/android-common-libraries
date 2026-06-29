@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.taisau.android.common.retrofit"
+    namespace = "com.taisau.android.http.client"
 
     publishing {
         singleVariant("release") {
@@ -16,6 +16,7 @@ android {
 dependencies {
     api(libs.retrofit.core)
     api(libs.okhttp)
+    implementation(libs.okhttp.sse)
     implementation(libs.retrofit.converter.kotlin.serialization)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)

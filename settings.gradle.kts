@@ -64,5 +64,5 @@ include(":utils-android")
 include(":utils-jvm")
 include(":mqtt")
 
-include(":retrofit")
+include(":httpclient")
 

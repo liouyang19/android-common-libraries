@@ -1,4 +1,4 @@
-package com.taisau.android.common.retrofit
+package com.taisau.android.http.client
 
 sealed class ApiResult<out T> {
 
@@ -6,7 +6,7 @@ sealed class ApiResult<out T> {
 
     data class Error(val code: Int = -1, val message: String) : ApiResult<Nothing>()
 
-    data class Exception(val throwable: kotlin.Throwable) : ApiResult<Nothing>()
+    data class Exception(val throwable:  Throwable) : ApiResult<Nothing>()
 
     data object Loading : ApiResult<Nothing>()
 
