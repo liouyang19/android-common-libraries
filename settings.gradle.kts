@@ -64,5 +64,7 @@ include(":utils-android")
 include(":utils-jvm")
 include(":mqtt")
 
+include(":loggger")
+
 include(":httpclient")
 
